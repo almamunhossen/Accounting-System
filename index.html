@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Invoice & Customer Management System</title>
+    <link rel="shortcut icon" href="/image/invoice-logo.png" type="Logo">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="adminLoginModal" class="modal" style="display:flex;z-index:4000;">
+        <div class="modal-content" style="max-width:420px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <i id="loginLogoIcon" class="fas fa-file-invoice-dollar" style="color:#0f766e;font-size:22px;"></i>
+                    <img id="loginLogoImg" class="logo-image" alt="Company Logo" style="display:none;width:34px;height:34px;border-radius:8px;object-fit:cover;">
+                    <div>
+                        <h3 id="loginCompanyName" style="margin:0;line-height:1.2;">InvoicePro</h3>
+                        <p style="margin:2px 0 0;font-size:11px;color:var(--text-secondary);">Admin Login</p>
+                    </div>
+                </div>
+            </div>
+            <p style="margin:0 0 16px 0;color:var(--text-secondary);font-size:13px;">Enter admin credentials to access the system.</p>
+            <form onsubmit="loginAdmin(); return false;">
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label for="adminUsernameInput">User Name</label>
+                    <input type="text" id="adminUsernameInput" placeholder="User Name" autocomplete="username" required>
+                </div>
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label for="adminPasswordInput">Password</label>
+                    <input type="password" id="adminPasswordInput" placeholder="Password" autocomplete="current-password" required>
+                </div>
+                <p id="adminLoginError" style="min-height:18px;margin:0 0 12px 0;color:#b91c1c;font-size:12px;"></p>
+                <button type="submit" class="btn-primary" style="width:100%;">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="appRoot" class="app-container" style="display:none;">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <i id="sidebarLogoIcon" class="fas fa-file-invoice-dollar"></i>
+                <img id="sidebarLogoImg" class="logo-image" alt="Company Logo" style="display:none;">
+                <h3 id="sidebarCompanyName">InvoicePro</h3>
+            </div>
+            <nav class="nav-menu">
+                <button onclick="showDashboard()" class="nav-btn active" id="navDashboard">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button onclick="showCustomers()" class="nav-btn" id="navCustomers">
+                    <i class="fas fa-users"></i>
+                    <span>Customers</span>
+                </button>
+                <button onclick="showSuppliers()" class="nav-btn" id="navSuppliers">
+                    <i class="fas fa-truck-loading"></i>
+                    <span>Suppliers</span>
+                </button>
+                <button onclick="showHR()" class="nav-btn" id="navHR">
+                    <i class="fas fa-user-tie"></i>
+                    <span>HR</span>
+                </button>
+                <button onclick="showProducts()" class="nav-btn" id="navProducts">
+                    <i class="fas fa-box"></i>
+                    <span>Products & Services</span>
+                </button>
+                <button onclick="showInvoiceList()" class="nav-btn" id="navInvoices">
+                    <i class="fas fa-list"></i>
+                    <span>Invoices</span>
+                </button>
+                <button onclick="createNewInvoice()" class="nav-btn" id="navCreate">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>New Invoice</span>
+                </button>
+                <button onclick="showQuotations()" class="nav-btn" id="navQuotations">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Quotations</span>
+                </button>
+                <button onclick="showReports()" class="nav-btn" id="navReports">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Reports</span>
+                </button>
+                <button onclick="showSettings()" class="nav-btn" id="navSettings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </button>
+            </nav>
+            <div class="user-info-sidebar">
+                <i class="fas fa-user-circle"></i>
+                <span id="sidebarUsername">Admin</span>
+                <button onclick="logout()" class="logout-btn"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Dashboard View -->
+            <div id="dashboardView" class="view" style="display: block;">
+                <div class="dashboard-header">
+                    <h1><i class="fas fa-chart-line"></i> Dashboard</h1>
+                    <div class="date-display" id="currentDate"></div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card" onclick="showCustomers()">
+                        <i class="fas fa-users"></i>
+                        <div class="stat-info">
+                            <h3>Total Customers</h3>
+                            <p id="totalCustomers">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="showInvoiceList()">
+                        <i class="fas fa-file-invoice"></i>
+                        <div class="stat-info">
+                            <h3>Total Invoices</h3>
+                            <p id="totalInvoices">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-dollar-sign"></i>
+                        <div class="stat-info">
+                            <h3>Total Revenue</h3>
+                            <p id="totalRevenue">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-chart-line"></i>
+                        <div class="stat-info">
+                            <h3>This Month</h3>
+                            <p id="monthRevenue">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <h3><i class="fas fa-chart-bar"></i> Monthly Revenue</h3>
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3><i class="fas fa-tags"></i> Customer Tags Distribution</h3>
+                        <canvas id="customerTagsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3><i class="fas fa-trophy"></i> Top Customers</h3>
+                    <div id="topCustomersList"></div>
+                </div>
+            </div>
+
+            <!-- Customers View -->
+            <div id="customersView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <h1><i class="fas fa-users"></i> Customer Management</h1>
+                    <div>
+                        <button onclick="showAddCustomerModal()" class="btn-primary">
+                            <i class="fas fa-plus"></i> Add Customer
+                        </button>
+                        <button onclick="exportCustomers()" class="btn-secondary">
+                            <i class="fas fa-file-excel"></i> Export
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="search-bar" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <input type="text" id="customerSearchInput" placeholder="Search by ID, name, phone, company, or email..." onkeyup="filterCustomers()" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <select id="tagFilter" onchange="filterCustomers()" style="padding: 10px; border-radius: 8px;">
+                        <option value="">All Tags</option>
+                        <option value="VIP">VIP</option>
+                        <option value="Regular">Regular</option>
+                        <option value="New">New</option>
+                        <option value="Pending">Pending</option>
+                    </select>
+                    <select id="customerStatusFilter" onchange="filterCustomers()" style="padding: 10px; border-radius: 8px;">
+                        <option value="">All Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+                
+                <div id="customersList" class="customers-grid"></div>
+            </div>
+
+            <!-- Suppliers View -->
+            <div id="suppliersView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <h1><i class="fas fa-truck-loading"></i> Supplier Management</h1>
+                    <div>
+                        <button onclick="showAddSupplierModal()" class="btn-primary">
+                            <i class="fas fa-plus"></i> Add Supplier
+                        </button>
+                    </div>
+                </div>
+
+                <div class="search-bar" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <input type="text" id="supplierSearchInput" placeholder="Search by ID, name, phone, company, or email..." onkeyup="filterSuppliers()" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <select id="supplierStatusFilter" onchange="filterSuppliers()" style="padding: 10px; border-radius: 8px;">
+                        <option value="">All Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+
+                <div id="suppliersList" class="customers-grid"></div>
+            </div>
+
+            <!-- HR View -->
+            <div id="hrView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center;">
+                    <div>
+                        <h1><i class="fas fa-user-tie"></i> HR</h1>
+                        <p style="color: var(--text-secondary); margin-top: 5px; font-size: 14px;">Human resources operations workspace.</p>
+                    </div>
+                </div>
+
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <i class="fas fa-id-badge"></i>
+                        <div class="stat-info">
+                            <h3>Total Employees</h3>
+                            <p id="hrTotalEmployees">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-user-check"></i>
+                        <div class="stat-info">
+                            <h3>Present Today</h3>
+                            <p id="hrPresentToday">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-calendar-times"></i>
+                        <div class="stat-info">
+                            <h3>Leave Requests</h3>
+                            <p id="hrLeaveRequests">0</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-tasks"></i>
+                        <div class="stat-info">
+                            <h3>Open Tasks</h3>
+                            <p id="hrOpenTasks">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Employee Database</h3>
+                    <button type="button" onclick="showAddEmployeeModal()" class="btn-primary"><i class="fas fa-user-plus"></i> Add Employee</button>
+                    <div id="hrEmployeeList" class="customers-grid" style="margin-top: 18px;"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Labor Management</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Employee</label>
+                            <select id="hrAttendanceEmployee"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" id="hrAttendanceDate">
+                        </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select id="hrAttendanceStatus">
+                                <option value="Present">Present</option>
+                                <option value="Late">Late</option>
+                                <option value="Absent">Absent</option>
+                            </select>
+                        </div>
+                    </div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                            <button type="button" id="hrAttendanceSubmitBtn" onclick="addHRAttendance()" class="btn-secondary"><i class="fas fa-clock"></i> Add Attendance</button>
+                            <button type="button" id="hrAttendanceCancelBtn" onclick="resetHRAttendanceForm()" class="btn-secondary" style="display:none;"><i class="fas fa-times"></i> Cancel Edit</button>
+                        </div>
+                    <div id="hrAttendanceList" class="report-list" style="margin-top: 16px;"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Absence Management</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Employee</label>
+                            <select id="hrLeaveEmployee"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Leave Type</label>
+                            <select id="hrLeaveType">
+                                <option value="Annual">Annual</option>
+                                <option value="Sick">Sick</option>
+                                <option value="Unpaid">Unpaid</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>From</label>
+                            <input type="date" id="hrLeaveFrom">
+                        </div>
+                        <div class="form-group">
+                            <label>To</label>
+                            <input type="date" id="hrLeaveTo">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button type="button" id="hrLeaveSubmitBtn" onclick="addHRLeave()" class="btn-secondary"><i class="fas fa-calendar-plus"></i> Add Leave</button>
+                        <button type="button" id="hrLeaveCancelBtn" onclick="resetHRLeaveForm()" class="btn-secondary" style="display:none;"><i class="fas fa-times"></i> Cancel Edit</button>
+                    </div>
+                    <div id="hrLeaveList" class="report-list" style="margin-top: 16px;"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Tasks and Activities Tracking</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Task Title</label>
+                            <input type="text" id="hrTaskTitle" placeholder="Enter HR task">
+                        </div>
+                        <div class="form-group">
+                            <label>Priority</label>
+                            <select id="hrTaskPriority">
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="button" onclick="addHRTask()" class="btn-success"><i class="fas fa-plus"></i> Add Task</button>
+                    <div id="hrTaskList" class="report-list" style="margin-top: 16px;"></div>
+                </div>
+
+            </div>
+
+            <!-- Products View -->
+            <div id="productsView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center;">
+                    <div>
+                        <h1><i class="fas fa-box"></i> All Products & Services</h1>
+                        <p style="color: var(--text-secondary); margin-top: 5px; font-size: 14px;">Manage your product and service catalog</p>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button onclick="showAddProductModal()" class="btn-primary">
+                            <i class="fas fa-plus"></i> Add Product
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Search Products</label>
+                            <input type="text" id="productSearchInput" placeholder="Search by ID, name, supplier, or description..." onkeyup="filterProducts()" style="width: 100%; padding: 12px 15px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); font-size: 14px;">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="supplier-list-shell" style="margin-top: 0;">
+                    <div class="supplier-list-title">Product Catalog</div>
+                    <div class="supplier-table-wrap">
+                        <table class="supplier-table">
+                            <thead>
+                                <tr>
+                                    <th>Product ID</th>
+                                    <th>Product / Service Name</th>
+                                    <th>Description</th>
+                                    <th>Unit Price</th>
+                                    <th>VAT %</th>
+                                    <th>VAT Incl.</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <datalist id="productsDatalist"></datalist>
+            </div>
+
+            <!-- Invoice List View -->
+            <div id="invoiceListView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <h1><i class="fas fa-list"></i> All Invoices</h1>
+                    <button onclick="createNewInvoice()" class="btn-primary">
+                        <i class="fas fa-plus"></i> New Invoice
+                    </button>
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="invoiceSearchInput" placeholder="Search by ID, invoice no, customer, date, or status..." onkeyup="filterInvoices()" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                </div>
+                <div id="invoiceTableContainer"></div>
+            </div>
+
+            <!-- Invoice Form View -->
+            <div id="invoiceFormView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <h1><i class="fas fa-edit"></i> <span id="formTitle">Create Invoice</span></h1>
+                    <button onclick="showInvoiceList()" class="btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                </div>
+                
+                <div id="invoicePrintArea">
+                    <div class="invoice-wrapper" id="invoicePreview"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Invoice Information</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Select Customer *</label>
+                            <select id="customerSelect" onchange="loadCustomerData()">
+                                <option value="">-- Select Existing Customer --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Or New Customer Name</label>
+                            <input type="text" id="customerNameInput" placeholder="New customer name" oninput="updatePreview()">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Invoice Number</label>
+                            <input type="text" id="invoiceNoDisplay" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Invoice Date</label>
+                            <input type="date" id="invoiceDate" onchange="updatePreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Due Date</label>
+                            <input type="date" id="dueDate" onchange="updatePreview()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Customer Details</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="customerPhoneInput" oninput="updatePreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="customerEmailInput" oninput="updatePreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>VAT / TAX No.</label>
+                            <input type="text" id="customerVatInput" oninput="updatePreview()">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Company</label>
+                            <input type="text" id="customerCompanyInput" oninput="updatePreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Address</label>
+                            <textarea id="customerAddressInput" rows="2" oninput="updatePreview()"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <h3>Invoice Items</h3>
+                        <button type="button" onclick="addItemInput()" class="btn-primary flex items-center gap-2 px-4 py-3 text-sm">
+                            <i class="fas fa-plus"></i>
+                            Add Item
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto rounded-3xl bg-slate-50 p-4 shadow-sm">
+                        <table class="min-w-full table-auto divide-y divide-slate-200">
+                            <thead class="bg-white">
+                                <tr class="text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                                    <th class="px-4 py-3">Item / Service Name</th>
+                                    <th class="px-4 py-3">Description</th>
+                                    <th class="px-4 py-3">Quantity</th>
+                                    <th class="px-4 py-3">Unit Price (SR)</th>
+                                    <th class="px-4 py-3">Total</th>
+                                    <th class="px-4 py-3">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoiceItemsTableBody" class="divide-y divide-slate-200 bg-white"></tbody>
+                        </table>
+                    </div>
+                    <div class="mt-6 grid gap-4 lg:grid-cols-4">
+                        <div class="rounded-3xl bg-white p-5 shadow-sm">
+                            <p class="text-sm text-slate-500">Subtotal</p>
+                            <p id="productSubtotal" class="mt-3 text-2xl font-semibold text-slate-900">SR 0.00</p>
+                        </div>
+                        <div class="rounded-3xl bg-white p-5 shadow-sm">
+                            <p class="text-sm text-slate-500">Total Discount</p>
+                            <p id="productDiscountTotal" class="mt-3 text-2xl font-semibold text-slate-900">SR 0.00</p>
+                        </div>
+                        <div class="rounded-3xl bg-white p-5 shadow-sm">
+                            <p class="text-sm text-slate-500">VAT Total</p>
+                            <p id="productVatTotal" class="mt-3 text-2xl font-semibold text-slate-900">SR 0.00</p>
+                        </div>
+                        <div class="rounded-3xl bg-white p-5 shadow-sm">
+                            <p class="text-sm text-slate-500">Grand Total</p>
+                            <p id="productGrandTotal" class="mt-3 text-2xl font-semibold text-slate-900">SR 0.00</p>
+                        </div>
+                    </div>
+                    <datalist id="invoiceProductsDatalist"></datalist>
+                </div>
+
+                <div class="form-section">
+                    <h3>Calculations</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>VAT Rate (%)</label>
+                            <input type="number" id="vatRateInput" value="15" step="0.1" oninput="updateTotals()" onchange="updateTotals()">
+                        </div>
+                        <div class="form-group">
+                            <label>Discount (%)</label>
+                            <input type="number" id="discountInput" value="0" step="0.1" oninput="updateTotals()" onchange="updateTotals()">
+                        </div>
+                        <div class="form-group">
+                            <label>Shipping</label>
+                            <input type="number" id="shippingInput" value="0" step="0.1" oninput="updateTotals()" onchange="updateTotals()">
+                        </div>
+                        <div class="form-group">
+                            <label>Advance Payment</label>
+                            <input type="number" id="advancePaymentInput" value="0" step="0.01" oninput="updateTotals()" onchange="updateTotals()">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-section">
+                    <h3>Actions</h3>
+                    <div class="invoice-toolbar">
+                        <button onclick="saveInvoice()" class="btn-primary"><i class="fas fa-save"></i> Save</button>
+                        <button onclick="printInvoice()" class="btn-secondary"><i class="fas fa-print"></i> Print</button>
+                        <button onclick="downloadPDF()" class="btn-secondary"><i class="fas fa-file-pdf"></i> PDF</button>
+                        <button onclick="sendInvoiceEmail()" class="btn-success"><i class="fas fa-envelope"></i> Email</button>
+                        <button onclick="sendWhatsApp()" class="btn-success"><i class="fab fa-whatsapp"></i> WhatsApp</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Quotations View -->
+            <div id="quotationsView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <h1><i class="fas fa-file-alt"></i> All Quotations</h1>
+                    <button onclick="showQuotationForm()" class="btn-primary">
+                        <i class="fas fa-plus"></i> New Quotation
+                    </button>
+                </div>
+                <div class="mb-6">
+                    <input
+                        id="quotationSearchInput"
+                        type="text"
+                        placeholder="Search by ID, quotation no, customer, item, or date..."
+                        onkeyup="filterQuotations()"
+                        class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    />
+                </div>
+                <div id="quotationsList" class="overflow-x-auto rounded-[8px] bg-white p-4 shadow-lg"></div>
+            </div>
+
+            <!-- Quotation Form View -->
+            <div id="quotationFormView" class="view">
+                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <h1><i class="fas fa-edit"></i> <span id="quotationFormTitle">Create Quotation</span></h1>
+                    <button onclick="showQuotations()" class="btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                </div>
+                
+                <div id="quotationPrintArea">
+                    <div class="invoice-wrapper" id="quotationPreview"></div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Quotation Information</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Quotation Number</label>
+                            <input type="text" id="quotationNoDisplay" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" id="quotationDate" onchange="updateQuotationPreview()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Customer Details</h3>
+                    <div class="form-group">
+                        <label>Customer Name *</label>
+                        <select id="quotationCustomerSelect" onchange="updateQuotationPreview()" required>
+                            <option value="">-- Select Customer --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Quotation Items</h3>
+                    <div class="item-row item-row-header">
+                        <div>Description</div>
+                        <div>Qty</div>
+                        <div>Price</div>
+                        <div>Discount</div>
+                        <div></div>
+                    </div>
+                    <div id="quotationItemsInputContainer"></div>
+                    <button type="button" onclick="addQuotationItemInput()" class="btn-secondary">
+                        <i class="fas fa-plus"></i> Add Item
+                    </button>
+                </div>
+
+                <div class="form-actions" style="display: flex; gap: 10px;">
+                    <button onclick="saveQuotation()" class="btn-primary"><i class="fas fa-save"></i> Save</button>
+                    <button onclick="printQuotation()" class="btn-secondary"><i class="fas fa-print"></i> Print</button>
+                    <button onclick="downloadQuotationPDF()" class="btn-secondary"><i class="fas fa-file-pdf"></i> PDF</button>
+                    <button onclick="sendQuotationEmail()" class="btn-success"><i class="fas fa-envelope"></i> Email</button>
+                    <button onclick="sendQuotationWhatsApp()" class="btn-success"><i class="fab fa-whatsapp"></i> WhatsApp</button>
+                </div>
+            </div>
+
+            <!-- Reports View -->
+            <div id="reportsView" class="view">
+                <div class="report-header">
+                    <div>
+                        <h1><i class="fas fa-chart-bar"></i> Reports & Analytics</h1>
+                        <p class="report-subtitle">Track revenue, expenses, profit, customers, invoices, products, HR, and VAT in one live workspace.</p>
+                        <p class="report-subtitle" style="margin-top:6px;">
+                            Data Source: <strong id="reportDataSourceStatus">Local Cache</strong>
+                        </p>
+                    </div>
+                    <div class="report-toolbar-actions">
+                        <button onclick="loadReports()" class="btn-secondary"><i class="fas fa-rotate"></i> Refresh</button>
+                        <button onclick="exportReportsToExcel()" class="btn-secondary"><i class="fas fa-file-excel"></i> Export Excel</button>
+                        <button onclick="exportReportsPDF()" class="btn-secondary"><i class="fas fa-file-pdf"></i> Export PDF</button>
+                        <button onclick="printReports()" class="btn-primary"><i class="fas fa-print"></i> Print</button>
+                    </div>
+                </div>
+
+                <div class="report-toolbar">
+                    <div class="report-filters">
+                        <div class="form-group">
+                            <label>Filter</label>
+                            <select id="reportFilterPreset" onchange="filterReports()">
+                                <option value="today">Today</option>
+                                <option value="thisWeek">This Week</option>
+                                <option value="thisMonth" selected>This Month</option>
+                                <option value="thisYear">This Year</option>
+                                <option value="custom">Custom Date Range</option>
+                            </select>
+                        </div>
+                        <div id="reportCustomRange" class="report-custom-range" style="display:none;">
+                            <div class="form-group">
+                                <label>From</label>
+                                <input type="date" id="reportFromDate" onchange="filterReports()">
+                            </div>
+                            <div class="form-group">
+                                <label>To</label>
+                                <input type="date" id="reportToDate" onchange="filterReports()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="report-range-pill">
+                        <span>Active Range</span>
+                        <strong id="reportActiveRangeLabel">This Month</strong>
+                    </div>
+                </div>
+
+                <div class="report-section-head" style="margin-bottom:12px;">
+                    <h3>Overview Cards</h3>
+                    <div class="report-section-actions">
+                        <span>Revenue, expense, profit, and invoice snapshot</span>
+                        <button onclick="printReportSection('reportOverviewSection','Overview Cards')" class="btn-secondary"><i class="fas fa-print"></i> Print Section</button>
+                    </div>
+                </div>
+
+                <div id="reportOverviewSection" class="stats-grid report-stats-grid">
+                    <div class="report-card">
+                        <div class="report-card-icon"><i class="fas fa-dollar-sign"></i></div>
+                        <div class="report-card-content">
+                            <span>Total Sales</span>
+                            <strong id="reportTotalSales">0</strong>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon"><i class="fas fa-receipt"></i></div>
+                        <div class="report-card-content">
+                            <span>Total Expenses</span>
+                            <strong id="reportTotalExpenses">0</strong>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon"><i class="fas fa-sack-dollar"></i></div>
+                        <div class="report-card-content">
+                            <span>Net Profit</span>
+                            <strong id="reportNetProfit">0</strong>
+                        </div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-card-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                        <div class="report-card-content">
+                            <span>Total Invoices</span>
+                            <strong id="reportTotalInvoices">0</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-kpi-grid">
+                    <div class="report-kpi-card">
+                        <span>Daily Sales</span>
+                        <strong id="reportDailySales">0</strong>
+                        <small>Current day performance</small>
+                    </div>
+                    <div class="report-kpi-card">
+                        <span>Monthly Sales</span>
+                        <strong id="reportMonthlySales">0</strong>
+                        <small>Current month performance</small>
+                    </div>
+                    <div class="report-kpi-card">
+                        <span>Yearly Sales</span>
+                        <strong id="reportYearlySales">0</strong>
+                        <small>Current year performance</small>
+                    </div>
+                    <div class="report-kpi-card">
+                        <span>Sales Growth</span>
+                        <strong id="reportSalesGrowth">0%</strong>
+                        <small id="reportSalesGrowthMeta">Compared with previous period</small>
+                    </div>
+                </div>
+
+                <div class="report-section-head" style="margin-bottom:12px;">
+                    <h3>Charts</h3>
+                    <div class="report-section-actions">
+                        <span>Trend and distribution analytics</span>
+                        <button onclick="printReportSection('reportChartsSection','Charts')" class="btn-secondary"><i class="fas fa-print"></i> Print Section</button>
+                    </div>
+                </div>
+
+                <div id="reportChartsSection">
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Sales Trend</h3>
+                            <span id="reportSalesTrendMeta">Revenue over time</span>
+                        </div>
+                        <canvas id="reportSalesTrendChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Expense Trend</h3>
+                            <span>Monthly expense trend</span>
+                        </div>
+                        <canvas id="reportMonthlyExpenseChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Customer Distribution</h3>
+                            <span>New vs returning customer share</span>
+                        </div>
+                        <canvas id="reportCustomerMixChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Profit/Loss Chart</h3>
+                            <span>Revenue, expense, and net profit trend</span>
+                        </div>
+                        <canvas id="reportProfitLossChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Product Revenue</h3>
+                            <span>Top revenue-driving products and services</span>
+                        </div>
+                        <canvas id="reportProductRevenueChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>VAT Trend</h3>
+                            <span>Monthly VAT summary</span>
+                        </div>
+                        <canvas id="reportVatTrendChart"></canvas>
+                    </div>
+                </div>
+                </div>
+
+                <div class="report-section-head" style="margin-bottom:12px;">
+                    <h3>Tables</h3>
+                    <div class="report-section-actions">
+                        <span>Top customers, recent invoices, and product performance</span>
+                        <button onclick="printReportSection('reportTablesSection','Tables')" class="btn-secondary"><i class="fas fa-print"></i> Print Section</button>
+                    </div>
+                </div>
+
+                <div id="reportTablesSection">
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Top Customers</h3>
+                            <span>Top 5 customers by total purchase</span>
+                        </div>
+                        <div class="report-table-wrap">
+                            <table class="report-table">
+                                <thead>
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Invoices</th>
+                                        <th>Total Sales</th>
+                                        <th>Share</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reportTopCustomersTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Recent Invoices</h3>
+                            <span>Latest invoices in selected range</span>
+                        </div>
+                        <div class="report-table-wrap">
+                            <table class="report-table">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice</th>
+                                        <th>Customer</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reportRecentInvoicesTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="reportCustomerSalesSection" class="chart-card" style="margin-bottom: 30px;">
+                    <div class="report-section-head">
+                        <h3>Product Performance</h3>
+                        <span>Revenue, quantity, and profit by product/service</span>
+                    </div>
+                    <div class="report-table-wrap">
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Quantity</th>
+                                    <th>Revenue</th>
+                                    <th>Profit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportProductPerformanceTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                </div>
+
+                <div id="reportHRSection" class="chart-card" style="margin-bottom: 30px;">
+                    <div class="report-section-head">
+                        <h3>HR Reports</h3>
+                        <div class="report-section-actions">
+                            <button onclick="printHRReportsSection()" class="btn-secondary"><i class="fas fa-print"></i> Print HR Section</button>
+                        </div>
+                    </div>
+
+                    <div class="charts-container" style="margin-bottom: 0;">
+                        <div class="chart-card">
+                            <div class="report-section-head">
+                                <h3>HR Snapshot</h3>
+                                <span>Total employees, attendance, leaves, salary</span>
+                            </div>
+                            <div id="reportHRSummaryList" class="report-list"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="report-section-head">
+                                <h3>Attendance Mix</h3>
+                                <span>Present, late, absent ratio</span>
+                            </div>
+                            <canvas id="reportAttendanceMixChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="charts-container" style="margin-bottom: 0;">
+                        <div class="chart-card">
+                            <div class="report-section-head">
+                                <h3>Employee Performance Tracking</h3>
+                                <span>Score based on attendance, leave, and overtime</span>
+                            </div>
+                            <canvas id="reportEmployeePerformanceChart"></canvas>
+                            <div id="reportEmployeePerformanceList" class="report-list"></div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="report-section-head">
+                                <h3>Overtime Report</h3>
+                                <span>Employee overtime hours by period</span>
+                            </div>
+                            <canvas id="reportOvertimeChart"></canvas>
+                            <div id="reportOvertimeList" class="report-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-card" style="margin-bottom: 30px;">
+                    <div class="report-section-head">
+                        <h3>Customer-wise Sales</h3>
+                        <div class="report-section-actions">
+                            <span>Full customer performance table</span>
+                            <button onclick="printReportSection('reportCustomerSalesSection','Customer-wise Sales')" class="btn-secondary"><i class="fas fa-print"></i> Print Section</button>
+                        </div>
+                    </div>
+                    <div class="report-table-wrap">
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Customer</th>
+                                    <th>Invoices</th>
+                                    <th>Total Sales</th>
+                                    <th>Share</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportCustomerSalesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <div id="reportInvoiceAnalyticsSection" class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Invoice Analytics</h3>
+                            <div class="report-section-actions">
+                                <span>Operational billing metrics</span>
+                                <button onclick="printReportSection('reportInvoiceAnalyticsSection','Invoice Analytics')" class="btn-secondary"><i class="fas fa-print"></i> Print Section</button>
+                            </div>
+                        </div>
+                        <div id="reportInvoiceSummaryList" class="report-list"></div>
+                    </div>
+                    <div id="reportVATSection" class="chart-card">
+                        <div class="report-section-head">
+                            <h3>Tax / VAT Report (Saudi)</h3>
+                            <div class="report-section-actions">
+                                <button onclick="printVATReportsSection()" class="btn-secondary"><i class="fas fa-print"></i> Print VAT Section</button>
+                            </div>
+                        </div>
+                        <div id="reportVatSummaryList" class="report-list"></div>
+                        <div class="report-table-wrap" style="margin-top:12px;">
+                            <table class="report-table">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice</th>
+                                        <th>Customer</th>
+                                        <th>VAT</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="reportVatInvoiceTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="report-section-head" style="margin-top:14px;">
+                            <h3>VAT Summary Monthly</h3>
+                            <span>ZATCA reporting support</span>
+                        </div>
+                        <div id="reportVatMonthlySummaryList" class="report-list"></div>
+                    </div>
+                </div>
+
+                <div id="reportInsightsSection" class="chart-card">
+                    <div class="report-section-head">
+                        <h3>Smart Insights</h3>
+                        <div class="report-section-actions">
+                            <span>Automatically generated from live data</span>
+                            <button onclick="printReportSection('reportInsightsSection','Smart Insights')" class="btn-secondary"><i class="fas fa-print"></i> Print Section</button>
+                        </div>
+                    </div>
+                    <div id="reportInsightsList" class="report-list"></div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="settingsView" class="view">
+                <h1><i class="fas fa-cog"></i> Settings</h1>
+                <div class="form-section">
+                    <h3>Company Information</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Company Name</label>
+                            <input type="text" id="companyName" placeholder="Your Company">
+                        </div>
+                        <div class="form-group">
+                            <label>VAT/TAX Number</label>
+                            <input type="text" id="companyVatNumber" placeholder="Enter VAT/TAX Number">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Mobile Number</label>
+                            <input type="tel" id="companyMobile" placeholder="Enter mobile number">
+                        </div>
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" id="companyEmail" placeholder="Enter email address">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Website</label>
+                            <input type="url" id="companyWebsite" placeholder="https://www.yourwebsite.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Google Apps Script API URL</label>
+                            <input type="url" id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+                            <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">Use deployed Web App URL for live Google Sheets sync.</small>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Company Logo</label>
+                            <input type="file" id="companyLogoInput" accept="image/*">
+                            <div
+                                id="companyLogoPasteArea"
+                                class="logo-paste-area"
+                                contenteditable="true"
+                                onpaste="handleCompanyLogoPaste(event)"
+                                aria-label="Paste logo image area"
+                            >Paste logo image here with Ctrl+V</div>
+                            <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">Tip: Copy an image, click this box, then press Ctrl+V.</small>
+                            <div id="companyLogoPreview" style="margin-top:10px;"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Company Address</label>
+                        <div id="companyAddress" contenteditable="true" class="html-editor" placeholder="Enter company address with HTML formatting (e.g., &lt;br&gt; for line breaks, &lt;strong&gt; for bold text)"></div>
+                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">You can use HTML tags like &lt;br&gt;, &lt;strong&gt;, &lt;em&gt;, etc.</small>
+                    </div>
+                    <div class="form-group" style="border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 16px; background: var(--bg-primary);">
+                        <label style="margin-bottom: 8px;">QR Code Settings (Custom Option)</label>
+                        <label style="display: flex; align-items: center; gap: 10px; margin: 0; font-weight: 500; cursor: pointer;">
+                            <input type="checkbox" id="vatTaxEnabledToggle" style="width: 18px; height: 18px; accent-color: var(--accent);">
+                            Enable VAT/Tax QR code on invoices
+                        </label>
+                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 8px; display: block;">When disabled, clicking QR icon in All Invoices will not show or print QR code.</small>
+                    </div>
+                    <button onclick="saveSettings()" class="btn-primary">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div id="customerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="display: flex; justify-content: space-between;">
+                <h3 id="customerModalTitle">Add Customer</h3>
+                <span onclick="closeCustomerModal()" style="cursor: pointer;">&times;</span>
+            </div>
+            <form id="customerForm">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="customerName" required>
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" id="customerPhone">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="customerEmail">
+                </div>
+                <div class="form-group">
+                    <label>Company</label>
+                    <input type="text" id="customerCompany">
+                </div>
+                <div class="form-group">
+                    <label>VAT / TAX No.</label>
+                    <input type="text" id="customerVatNumber" placeholder="Enter VAT or Tax Number">
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <textarea id="customerAddress" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Tag</label>
+                    <select id="customerTag">
+                        <option value="New">New</option>
+                        <option value="Regular">Regular</option>
+                        <option value="VIP">VIP</option>
+                        <option value="Pending">Pending</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Credit Limit</label>
+                        <input type="number" min="0" step="0.01" id="customerCreditLimit" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Terms (Days)</label>
+                        <select id="customerPaymentTerms">
+                            <option value="7">7</option>
+                            <option value="15">15</option>
+                            <option value="30" selected>30</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Customer Type</label>
+                        <select id="customerType">
+                            <option value="Individual">Individual</option>
+                            <option value="Company">Company</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="customerStatus">
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="customerNotes" rows="2" placeholder="Special instructions, preferences..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Opening Balance</label>
+                        <input type="number" min="0" step="0.01" id="customerOpeningBalance" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Opening Type</label>
+                        <select id="customerOpeningBalanceType">
+                            <option value="Dr">Dr</option>
+                            <option value="Cr">Cr</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Closing Balance</label>
+                        <input type="number" min="0" step="0.01" id="customerClosingBalance" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Closing Type</label>
+                        <select id="customerClosingBalanceType">
+                            <option value="Dr">Dr</option>
+                            <option value="Cr">Cr</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary">Save Customer</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Supplier Modal -->
+    <div id="supplierModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="display: flex; justify-content: space-between;">
+                <h3 id="supplierModalTitle">Add Supplier</h3>
+                <span onclick="closeSupplierModal()" style="cursor: pointer;">&times;</span>
+            </div>
+            <form id="supplierForm">
+                <div class="form-group">
+                    <label>Supplier Name *</label>
+                    <input type="text" id="supplierName" required>
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" id="supplierPhone">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="supplierEmail">
+                </div>
+                <div class="form-group">
+                    <label>Company</label>
+                    <input type="text" id="supplierCompany">
+                </div>
+                <div class="form-group">
+                    <label>VAT / TAX No.</label>
+                    <input type="text" id="supplierVatNumber" placeholder="Enter VAT or Tax Number">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Payment Terms (Days)</label>
+                        <select id="supplierPaymentTerms">
+                            <option value="7">7</option>
+                            <option value="15">15</option>
+                            <option value="30" selected>30</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="supplierStatus">
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Contact Person</label>
+                        <input type="text" id="supplierContactPerson" placeholder="Name of contact person">
+                    </div>
+                    <div class="form-group">
+                        <label>Bank Details</label>
+                        <input type="text" id="supplierBankDetails" placeholder="Bank + Account details">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <textarea id="supplierAddress" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="supplierNotes" rows="2" placeholder="Payment terms, delivery notes..."></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Opening Balance</label>
+                        <input type="number" min="0" step="0.01" id="supplierOpeningBalance" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Opening Type</label>
+                        <select id="supplierOpeningBalanceType">
+                            <option value="Dr">Dr</option>
+                            <option value="Cr">Cr</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Closing Balance</label>
+                        <input type="number" min="0" step="0.01" id="supplierClosingBalance" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Closing Type</label>
+                        <select id="supplierClosingBalanceType">
+                            <option value="Dr">Dr</option>
+                            <option value="Cr">Cr</option>
+                        </select>
+                    </div>
+                </div>
+                <hr style="margin:14px 0;border-color:var(--border-color);">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Total Purchases</label>
+                        <input type="number" min="0" step="0.01" id="supplierTotalPurchase" value="0" oninput="recalcSupplierDue()">
+                    </div>
+                    <div class="form-group">
+                        <label>Total Paid</label>
+                        <input type="number" min="0" step="0.01" id="supplierTotalPaid" value="0" oninput="recalcSupplierDue()">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Due Amount <span style="font-size:11px;color:#64748b;">(auto-calculated)</span></label>
+                    <input type="number" id="supplierDueAmount" value="0" step="0.01" readonly style="background:var(--bg-secondary,#f1f5f9);cursor:not-allowed;">
+                </div>
+                <button type="submit" class="btn-primary">Save Supplier</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Supplier Purchase Modal -->
+    <div id="supplierAddPurchaseModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <h3><i class="fas fa-shopping-cart"></i> Add Purchase</h3>
+                <span onclick="closeSupplierAddPurchaseModal()" style="cursor:pointer;font-size:1.4rem;">&times;</span>
+            </div>
+            <div style="padding:6px 0 12px;">
+                <p style="margin:0 0 4px;font-weight:600;" id="addPurchaseSupplierName"></p>
+                <p style="margin:0;color:#64748b;font-size:13px;">Current Total Purchases: <strong id="addPurchaseCurrentTotal">-</strong></p>
+            </div>
+            <div class="form-group">
+                <label>Invoice No *</label>
+                <input type="text" id="addPurchaseInvoiceNo" placeholder="Enter supplier invoice number" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+            </div>
+            <div class="form-group">
+                <label>Product Name *</label>
+                <input type="text" id="addPurchaseProductName" list="addPurchaseProductOptions" placeholder="Enter product name" oninput="handleSupplierPurchaseProductChange()" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+                <datalist id="addPurchaseProductOptions"></datalist>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Qty *</label>
+                    <input type="number" id="addPurchaseQuantity" min="0.01" step="0.01" value="1" oninput="updateSupplierPurchaseTotal()" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+                </div>
+                <div class="form-group">
+                    <label>Unit Cost *</label>
+                    <input type="number" id="addPurchaseUnitCost" min="0.01" step="0.01" value="0" oninput="updateSupplierPurchaseTotal()" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Total Amount <span style="font-size:11px;color:#64748b;">(auto-calculated)</span></label>
+                <input type="number" id="addPurchaseAmount" min="0" step="0.01" value="0" readonly style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-secondary,#f1f5f9);cursor:not-allowed;">
+            </div>
+            <div class="form-group">
+                <label>Purchase Date</label>
+                <input type="date" id="addPurchaseDate" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+            </div>
+            <div class="form-group">
+                <label>Note (optional)</label>
+                <input type="text" id="addPurchaseNote" placeholder="e.g. Invoice #, item description..." style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+            </div>
+            <div style="display:flex;gap:10px;margin-top:8px;">
+                <button onclick="processSupplierAddPurchase()" class="btn-primary" style="flex:1;"><i class="fas fa-check"></i> Confirm Purchase</button>
+                <button onclick="closeSupplierAddPurchaseModal()" class="btn-icon" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supplier Purchase History Modal -->
+    <div id="supplierPurchaseHistoryModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:640px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <h3 style="margin:0;"><i class="fas fa-history"></i> Purchase History</h3>
+                    <p id="supplierPurchaseHistorySupplierName" style="margin:4px 0 0;color:#64748b;font-size:13px;"></p>
+                </div>
+                <span onclick="closeSupplierPurchaseHistoryModal()" style="cursor:pointer;font-size:1.4rem;">&times;</span>
+            </div>
+            <div id="supplierPurchaseHistoryList" style="margin-top:14px;max-height:60vh;overflow:auto;padding-right:6px;"></div>
+            <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+                <button onclick="closeSupplierPurchaseHistoryModal()" class="btn-icon">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supplier Report Modal -->
+    <div id="supplierReportModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:980px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                <div>
+                    <h3 style="margin:0;"><i class="fas fa-chart-line"></i> <span id="supplierReportTitle">Supplier Report</span></h3>
+                    <p id="supplierReportMeta" style="margin:4px 0 0;color:#64748b;font-size:13px;"></p>
+                </div>
+                <span onclick="closeSupplierReportModal()" style="cursor:pointer;font-size:1.4rem;">&times;</span>
+            </div>
+            <div id="supplierReportSummary" class="supplier-report-summary"></div>
+            <div class="supplier-report-table-wrap">
+                <table class="supplier-report-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Invoice No</th>
+                            <th>Product</th>
+                            <th>Qty</th>
+                            <th>Total</th>
+                            <th>Paid</th>
+                            <th>Due</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="supplierReportTableBody"></tbody>
+                </table>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
+                <button onclick="printSupplierReport()" class="btn-secondary"><i class="fas fa-print"></i> Print Report</button>
+                <button onclick="closeSupplierReportModal()" class="btn-icon">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pay Supplier Bill Modal -->
+    <div id="supplierPayBillModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <h3><i class="fas fa-money-bill-wave"></i> Pay Bill</h3>
+                <span onclick="closeSupplierPayBillModal()" style="cursor:pointer;font-size:1.4rem;">&times;</span>
+            </div>
+            <div style="padding:6px 0 12px;">
+                <p style="margin:0 0 4px;font-weight:600;" id="payBillSupplierName"></p>
+                <p style="margin:0;color:#64748b;font-size:13px;">Due Amount: <strong id="payBillDueAmount">-</strong></p>
+            </div>
+            <div class="form-group">
+                <label>Select Invoice No *</label>
+                <select id="payBillInvoiceSelect" onchange="handleSupplierPaymentInvoiceChange()" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);"></select>
+            </div>
+            <div style="background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;">
+                <div style="display:flex;justify-content:space-between;gap:10px;"><span style="color:#64748b;">Product</span><strong id="payBillInvoiceProduct">-</strong></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:#64748b;">Invoice Total</span><strong id="payBillInvoiceTotal">-</strong></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:#64748b;">Already Paid</span><strong id="payBillInvoicePaid">-</strong></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:#64748b;">Invoice Due</span><strong id="payBillInvoiceDue">-</strong></div>
+            </div>
+            <div class="form-group">
+                <label>Payment Amount *</label>
+                <input type="number" id="payBillAmount" min="0.01" step="0.01" placeholder="Enter amount to pay" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+            </div>
+            <div class="form-group">
+                <label>Payment Date</label>
+                <input type="date" id="payBillDate" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+            </div>
+            <div class="form-group">
+                <label>Note (optional)</label>
+                <input type="text" id="payBillNote" placeholder="e.g. Bank transfer, cheque no..." style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);">
+            </div>
+            <div style="display:flex;gap:10px;margin-top:8px;">
+                <button onclick="processSupplierPayment()" class="btn-primary" style="flex:1;"><i class="fas fa-check"></i> Save Payment</button>
+                <button onclick="processSupplierPayment(true)" class="btn-secondary" style="flex:1;"><i class="fas fa-print"></i> Save & Print</button>
+                <button onclick="closeSupplierPayBillModal()" class="btn-icon" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Product Modal -->
+    <div id="productModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="display: flex; justify-content: space-between;">
+                <h3>Add Product / Service</h3>
+                <span onclick="closeProductModal()" style="cursor: pointer;">&times;</span>
+            </div>
+            <form id="productForm">
+                <div class="form-group">
+                    <label>Product / Service Name *</label>
+                    <input type="text" id="productModalName" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="productModalDescription">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Unit Price</label>
+                        <input type="number" min="0" step="0.01" id="productModalPrice" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>VAT %</label>
+                        <input type="number" min="0" step="0.1" id="productModalTax" value="15">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Supplier</label>
+                        <select id="productModalSupplier">
+                            <option value="">-- Select Supplier --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Cost</label>
+                        <input type="number" min="0" step="0.01" id="productModalCost" value="0">
+                    </div>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="productModalVatIncluded">
+                    <label for="productModalVatIncluded" style="margin: 0;">VAT / TAX Included <span style="color:var(--text-secondary);font-size:12px;">(price already includes VAT)</span></label>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="productModalDontUpdateQty">
+                    <label for="productModalDontUpdateQty" style="margin: 0;">Don't update quantity on invoice (On / Off)</label>
+                </div>
+                <button type="submit" class="btn-primary">Save Product</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Employee Modal -->
+    <div id="employeeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header" style="display: flex; justify-content: space-between;">
+                <h3 id="employeeModalTitle">Add Employee</h3>
+                <span onclick="closeEmployeeModal()" style="cursor: pointer;">&times;</span>
+            </div>
+            <form id="employeeForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Employee ID *</label>
+                        <input type="text" id="hrEmployeeId" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Name *</label>
+                        <input type="text" id="hrEmployeeName" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Profile Photo</label>
+                    <input type="file" id="hrEmployeePhoto" accept="image/*">
+                    <small style="display:block;margin-top:6px;color:#6b7280;">JPG, PNG, or WEBP up to 1 MB.</small>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">
+                        <div style="width:88px;height:88px;border-radius:50%;overflow:hidden;border:1px solid #d1d5db;background:#f8fafc;display:flex;align-items:center;justify-content:center;">
+                            <img id="hrEmployeePhotoPreview" alt="Employee photo preview" style="width:100%;height:100%;object-fit:cover;display:none;">
+                            <span id="hrEmployeePhotoPlaceholder" style="color:#94a3b8;font-size:12px;text-align:center;padding:8px;">No Photo</span>
+                        </div>
+                        <button type="button" id="hrEmployeePhotoRemoveBtn" onclick="removeEmployeePhoto()" class="btn-secondary" style="display:none;">Remove Photo</button>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Role</label>
+                        <input type="text" id="hrEmployeeRole" placeholder="e.g. HR Officer">
+                    </div>
+                    <div class="form-group">
+                        <label>Department</label>
+                        <input type="text" id="hrEmployeeDepartment" placeholder="e.g. Administration">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Salary</label>
+                        <input type="number" id="hrEmployeeSalary" min="0" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="hrEmployeeEmail" placeholder="employee@company.com">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Mobile</label>
+                        <input type="tel" id="hrEmployeeMobile" placeholder="+966...">
+                    </div>
+                    <div class="form-group">
+                        <label>Website</label>
+                        <input type="text" id="hrEmployeeWebsite" placeholder="https://example.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Home Address</label>
+                    <textarea id="hrEmployeeHomeAddress" rows="2" placeholder="Home address"></textarea>
+                </div>
+                <button type="submit" class="btn-primary">Save Employee</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Contact History Modal -->
+    <div id="contactHistoryModal" class="modal">
+        <div class="modal-content">
+            <h3>Contact History</h3>
+            <div id="contactHistoryList"></div>
+            <div class="form-group">
+                <label>Add Note</label>
+                <textarea id="newContactNote" rows="2" placeholder="New contact note..."></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button onclick="addContactNote()" class="btn-primary">Add Note</button>
+                <button onclick="sendWhatsAppToCustomer()" class="btn-success"><i class="fab fa-whatsapp"></i> WhatsApp</button>
+                <button onclick="sendEmailToCustomer()" class="btn-success"><i class="fas fa-envelope"></i> Email</button>
+            </div>
+            <button onclick="closeContactModal()" class="btn-secondary" style="margin-top: 10px;">Close</button>
+        </div>
+    </div>
+
+    <!-- Order History Modal -->
+    <div id="orderHistoryModal" class="modal">
+        <div class="modal-content">
+            <h3>Order History</h3>
+            <div id="orderHistoryList"></div>
+            <button onclick="closeOrderModal()" class="btn-secondary">Close</button>
+        </div>
+    </div>
+
+    <!-- QR Modal -->
+    <div id="qrModal" class="modal">
+        <div class="modal-content">
+            <div class="qr-container" id="qrCodeContainer"></div>
+            <button onclick="closeQRModal()" class="btn-secondary">Close</button>
+        </div>
+    </div>
+
+    <!-- Currency Selector -->
+    <div class="currency-selector">
+        <button class="currency-btn active" onclick="setCurrency('SAR')">SR</button>
+        <button class="currency-btn" onclick="setCurrency('BDT')">BDT</button>
+        <button class="currency-btn" onclick="setCurrency('USD')">USD</button>
+    </div>
+
+    <!-- Dark Mode Toggle -->
+    <div class="dark-mode-toggle">
+        <button onclick="toggleDarkMode()" class="btn-secondary">
+            <i class="fas fa-moon"></i> Dark/Light
+        </button>
+    </div>
+    <script src="api.js"></script>
+    <script src="crm-integration.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
