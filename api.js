@@ -1,6 +1,6 @@
 // API client for Google Apps Script backend
 // Set your deployed Apps Script Web App URL here.
-window.API_URL = window.API_URL || "";
+window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycby95Ut1SU6Aw-3PXnr_JH2Tz2-1CnGWP42T8JGE7qtf8pNicwfTIJxnqBZ9h8HGO1aYoA/exec";
 
 try {
     const persistedApiUrl = localStorage.getItem("gs_api_url") || "";
@@ -12,8 +12,16 @@ try {
 }
 
 (function attachApiClient(global) {
+    const warnedMissingActions = new Set();
+
     function isConfigured() {
         return typeof global.API_URL === "string" && /^https?:\/\//i.test(global.API_URL);
+    }
+
+    function getMissingActionName(message) {
+        const text = String(message || "");
+        const match = text.match(/Unknown action:\s*([A-Za-z0-9_]+)/i);
+        return match ? match[1] : "";
     }
 
     function ensureUiHelpers() {
@@ -86,6 +94,15 @@ try {
             const json = await request(payload);
             return Array.isArray(json.data) ? json.data : [];
         } catch (error) {
+            const missingAction = getMissingActionName(error && error.message);
+            if (missingAction && /^get/i.test(String(action || ""))) {
+                // Keep UI working when a read endpoint is not deployed yet.
+                if (!warnedMissingActions.has(missingAction)) {
+                    warnedMissingActions.add(missingAction);
+                    showToast(`${missingAction} is not deployed yet. Using cached/local data.`, "error");
+                }
+                return [];
+            }
             showToast(error.message || "Failed to load data", "error");
             throw error;
         } finally {

@@ -97,12 +97,12 @@ function initializeSheetHeaders() {
 
 // ==================== CUSTOMER MANAGEMENT ====================
 function getCustomers(filters = {}) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.CUSTOMERS);
+  const headers = normalizeHeaders_(HEADERS.CUSTOMERS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.CUSTOMERS, headers);
   const data = sheet.getDataRange().getValues();
   
   if (data.length <= 1) return [];
-  
-  const headers = data[0];
+
   const customers = [];
   
   for (let i = 1; i < data.length; i++) {
@@ -128,9 +128,9 @@ function getCustomers(filters = {}) {
 }
 
 function getCustomerById(customerId) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.CUSTOMERS);
+  const headers = normalizeHeaders_(HEADERS.CUSTOMERS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.CUSTOMERS, headers);
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -177,9 +177,9 @@ function addCustomer(customerData) {
 }
 
 function updateCustomer(customerId, customerData) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.CUSTOMERS);
+  const headers = normalizeHeaders_(HEADERS.CUSTOMERS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.CUSTOMERS, headers);
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
   
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === customerId) {
@@ -221,12 +221,12 @@ function calculateCustomerDue(customer) {
 
 // ==================== SUPPLIER MANAGEMENT ====================
 function getSuppliers(filters = {}) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.SUPPLIERS);
+  const headers = normalizeHeaders_(HEADERS.SUPPLIERS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.SUPPLIERS, headers);
   const data = sheet.getDataRange().getValues();
   
   if (data.length <= 1) return [];
-  
-  const headers = data[0];
+
   const suppliers = [];
   
   for (let i = 1; i < data.length; i++) {
@@ -251,9 +251,9 @@ function getSuppliers(filters = {}) {
 }
 
 function getSupplierById(supplierId) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.SUPPLIERS);
+  const headers = normalizeHeaders_(HEADERS.SUPPLIERS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.SUPPLIERS, headers);
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
@@ -297,9 +297,9 @@ function addSupplier(supplierData) {
 }
 
 function updateSupplier(supplierId, supplierData) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.SUPPLIERS);
+  const headers = normalizeHeaders_(HEADERS.SUPPLIERS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.SUPPLIERS, headers);
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
   
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === supplierId) {
@@ -360,12 +360,12 @@ function addCustomerTransaction(transactionData) {
 }
 
 function getCustomerTransactions(customerId) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.CUSTOMER_TRANSACTIONS);
+  const headers = normalizeHeaders_(HEADERS.CUSTOMER_TRANSACTIONS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.CUSTOMER_TRANSACTIONS, headers);
   const data = sheet.getDataRange().getValues();
   
   if (data.length <= 1) return [];
-  
-  const headers = data[0];
+
   const transactions = [];
   
   for (let i = 1; i < data.length; i++) {
@@ -432,12 +432,12 @@ function addSupplierTransaction(transactionData) {
 }
 
 function getSupplierTransactions(supplierId) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.SUPPLIER_TRANSACTIONS);
+  const headers = normalizeHeaders_(HEADERS.SUPPLIER_TRANSACTIONS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.SUPPLIER_TRANSACTIONS, headers);
   const data = sheet.getDataRange().getValues();
   
   if (data.length <= 1) return [];
-  
-  const headers = data[0];
+
   const transactions = [];
   
   for (let i = 1; i < data.length; i++) {
@@ -505,12 +505,12 @@ function addCustomerContact(contactData) {
 }
 
 function getCustomerContacts(customerId) {
-  const sheet = getCRMSpreadsheet().getSheetByName(SHEET_NAMES.CUSTOMER_CONTACTS);
+  const headers = normalizeHeaders_(HEADERS.CUSTOMER_CONTACTS);
+  const sheet = ensureSheetWithHeadersByName_(SHEET_NAMES.CUSTOMER_CONTACTS, headers);
   const data = sheet.getDataRange().getValues();
   
   if (data.length <= 1) return [];
-  
-  const headers = data[0];
+
   const contacts = [];
   
   for (let i = 1; i < data.length; i++) {
@@ -812,12 +812,23 @@ function doPost(e) {
     Logger.log('Error: ' + error.toString());
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
-      message: error.toString()
+      message: formatApiErrorMessage_(error)
     })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 // ==================== UTILITY FUNCTIONS ====================
+function formatApiErrorMessage_(error) {
+  const raw = String((error && error.message) || error || 'Unknown server error');
+  const cleaned = raw.replace(/^Exception:\s*/i, '').trim();
+
+  if (/يجب\s+ألا\s+تقل\s+الأعمدة\s+في\s+النطاق\s+عن\s+عمود\s+واحد/.test(cleaned)) {
+    return 'Range must have at least one column.';
+  }
+
+  return cleaned || 'Unknown server error';
+}
+
 function generateId(prefix) {
   const timestamp = Date.now().toString().slice(-8);
   const random = Math.random().toString(36).substring(2, 6);
@@ -825,60 +836,80 @@ function generateId(prefix) {
 }
 
 function objectFromRow(row, headers) {
+  const safeHeaders = normalizeHeaders_(headers);
   const obj = {};
-  headers.forEach((header, index) => {
+  safeHeaders.forEach((header, index) => {
     obj[header] = row[index] || '';
   });
   return obj;
 }
 
 function rowFromObject(obj, headers) {
-  return headers.map(header => obj[header] || '');
+  const safeHeaders = normalizeHeaders_(headers);
+  return safeHeaders.map(header => obj[header] || '');
 }
 
 function ensureSheetWithHeadersByName_(sheetName, headers) {
-  const safeHeaders = Array.isArray(headers) && headers.length ? headers : ['id'];
+  const safeHeaders = normalizeHeaders_(headers);
+  const headerCount = Math.max(1, safeHeaders.length);
   const ss = getCRMSpreadsheet();
   let sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
   }
 
+  // Ensure the sheet has enough physical columns before reading/writing headers.
+  const maxCols = Math.max(1, Number(sheet.getMaxColumns()) || 1);
+  if (maxCols < headerCount) {
+    sheet.insertColumnsAfter(maxCols, headerCount - maxCols);
+  }
+
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(safeHeaders);
   } else {
-    const currentHeaders = sheet.getRange(1, 1, 1, safeHeaders.length).getValues()[0];
+    const currentHeaders = sheet.getRange(1, 1, 1, headerCount).getValues()[0];
     const mismatch = safeHeaders.some((h, idx) => String(currentHeaders[idx] || '') !== h);
     if (mismatch) {
-      sheet.getRange(1, 1, 1, safeHeaders.length).setValues([safeHeaders]);
+      sheet.getRange(1, 1, 1, headerCount).setValues([safeHeaders]);
     }
   }
 
   return sheet;
 }
 
+function normalizeHeaders_(headers) {
+  if (!Array.isArray(headers)) return ['id'];
+  const cleaned = headers
+    .map(h => String(h || '').trim())
+    .filter(h => h !== '');
+  return cleaned.length ? cleaned : ['id'];
+}
+
 function readAllByName_(sheetName, headers) {
-  const sheet = ensureSheetWithHeadersByName_(sheetName, headers);
+  const safeHeaders = normalizeHeaders_(headers);
+  const sheet = ensureSheetWithHeadersByName_(sheetName, safeHeaders);
   const rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return [];
-  const headerRow = rows[0];
+  const headerRow = (rows[0] && rows[0].length) ? rows[0] : safeHeaders;
   return rows.slice(1)
     .filter(row => String(row[0] || '').trim() !== '')
     .map(row => objectFromRow(row, headerRow));
 }
 
 function addByName_(sheetName, headers, payload, prefix) {
-  const sheet = ensureSheetWithHeadersByName_(sheetName, headers);
+  const safeHeaders = normalizeHeaders_(headers);
+  const sheet = ensureSheetWithHeadersByName_(sheetName, safeHeaders);
   const idPrefix = prefix || 'ROW';
   const rowPayload = { ...payload };
   if (!rowPayload.id) rowPayload.id = generateId(idPrefix);
-  const row = rowFromObject(rowPayload, headers);
+  const row = rowFromObject(rowPayload, safeHeaders);
   sheet.appendRow(row);
   return rowPayload;
 }
 
 function updateByName_(sheetName, headers, payload) {
-  const sheet = ensureSheetWithHeadersByName_(sheetName, headers);
+  const safeHeaders = normalizeHeaders_(headers);
+  const sheet = ensureSheetWithHeadersByName_(sheetName, safeHeaders);
   const rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return null;
 
@@ -887,10 +918,10 @@ function updateByName_(sheetName, headers, payload) {
 
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0] || '') === rowId) {
-      const current = objectFromRow(rows[i], headers);
+      const current = objectFromRow(rows[i], safeHeaders);
       const updated = { ...current, ...payload };
-      const row = rowFromObject(updated, headers);
-      sheet.getRange(i + 1, 1, 1, headers.length).setValues([row]);
+      const row = rowFromObject(updated, safeHeaders);
+      sheet.getRange(i + 1, 1, 1, safeHeaders.length).setValues([row]);
       return updated;
     }
   }

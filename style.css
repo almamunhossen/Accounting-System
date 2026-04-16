@@ -1529,54 +1529,173 @@
             display: block;
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 70px;
+        /* Responsive Design */
+        /* Tablet Breakpoint (768px - 1024px) */
+        @media (max-width: 1024px) {
+            .main-content {
+                padding: 20px;
             }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+            }
+
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+
+            .report-kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            #reportsView canvas {
+                max-height: 280px;
+            }
+        }
+
+        /* Mobile Breakpoint (max 768px) */
+        @media (max-width: 768px) {
+            html {
+                font-size: 14px;
+            }
+
+            body {
+                overflow-x: hidden;
+            }
+
+            .sidebar {
+                width: 60px;
+                position: fixed;
+                left: 0;
+                top: 0;
+                z-index: 1000;
+            }
+
             .sidebar span:not(.logo i) {
                 display: none;
             }
-            .main-content {
-                margin-left: 70px;
+
+            .logo {
+                padding: 15px 10px;
             }
+
+            .logo i {
+                font-size: 24px;
+            }
+
+            .logo h3 {
+                font-size: 0;
+            }
+
+            .main-content {
+                margin-left: 60px;
+                padding: 15px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .stat-card {
+                padding: 15px;
+                gap: 12px;
+            }
+
+            .stat-card i {
+                font-size: 36px;
+            }
+
+            .stat-info h3 {
+                font-size: 12px;
+            }
+
+            .stat-info p {
+                font-size: 22px;
+            }
+
             .customers-grid {
                 grid-template-columns: 1fr;
             }
 
+            .customer-card {
+                padding: 15px;
+            }
+
             .supplier-list-shell {
-                padding: 14px;
+                padding: 12px;
+                margin-top: 15px;
             }
 
             .supplier-list-title {
-                font-size: 18px;
-                margin-bottom: 14px;
+                font-size: 16px;
+                margin-bottom: 12px;
             }
 
             .supplier-table {
-                min-width: 760px;
+                min-width: 100%;
+                font-size: 12px;
+            }
+
+            .supplier-table th,
+            .supplier-table td {
+                padding: 10px 8px;
+                font-size: 12px;
+            }
+
+            .supplier-action-group {
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .supplier-action-btn {
+                width: 100%;
+                min-height: 36px;
+                padding: 8px 10px;
+                font-size: 11px;
             }
 
             .products-table-wrap {
-                padding: 10px;
+                padding: 8px;
+                border-radius: 12px;
             }
 
             .products-table {
-                min-width: 700px;
+                min-width: 100%;
+                font-size: 12px;
             }
 
             .products-table th,
             .products-table td {
-                padding: 12px 10px;
+                padding: 10px 8px;
+            }
+
+            .product-input {
+                padding: 8px 10px;
+                font-size: 14px;
+                min-height: 40px;
+            }
+
+            .product-delete-btn {
+                width: 36px;
+                height: 36px;
+                min-width: 36px;
+                min-height: 36px;
             }
 
             .quotation-table {
-                min-width: 760px;
+                min-width: 100%;
+                font-size: 12px;
             }
 
             .quotation-table th,
             .quotation-table td {
-                padding: 12px 10px;
+                padding: 10px 8px;
             }
 
             .quotation-status-toggle span {
@@ -1584,30 +1703,240 @@
             }
 
             .quotation-status-toggle {
-                width: 36px;
+                width: 34px;
+                height: 34px;
+                min-height: 34px;
                 padding: 0;
                 justify-content: center;
+                font-size: 12px;
             }
 
             .report-toolbar {
-                padding: 16px;
+                padding: 12px;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .report-filters {
+                flex-direction: column;
             }
 
             .report-custom-range {
                 grid-template-columns: 1fr;
+                width: 100%;
+            }
+
+            .report-range-pill {
+                width: 100%;
+                min-width: auto;
             }
 
             .report-toolbar-actions {
                 width: 100%;
                 justify-content: stretch;
+                flex-direction: column;
             }
 
             .report-toolbar-actions button {
-                flex: 1 1 100%;
+                width: 100%;
+                min-height: 40px;
+                padding: 10px;
             }
 
-            .report-range-pill {
-                width: 100%;
+            .report-kpi-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .report-card {
+                padding: 16px;
+            }
+
+            .form-group input,
+            .form-group select,
+            .form-group textarea {
+                min-height: 44px;
+                padding: 12px;
+                font-size: 16px;
+            }
+
+            .btn-primary, .btn-secondary, .btn-danger, .btn-success {
+                min-height: 44px;
+                padding: 12px 16px;
+                font-size: 14px;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-card {
+                padding: 15px;
+            }
+
+            #reportsView canvas {
+                max-height: 250px;
+            }
+
+            .modal-content {
+                width: 90vw;
+                max-width: 400px;
+                margin: 20px auto;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+
+            .invoice-card {
+                padding: 15px;
+            }
+
+            .item-row input {
+                font-size: 16px;
+                min-height: 40px;
+                padding: 10px;
+            }
+
+            .hr-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hr-card {
+                padding: 16px;
+            }
+
+            .quotation-details {
+                padding: 12px;
+            }
+        }
+
+        /* Small Mobile Breakpoint (max 480px) */
+        @media (max-width: 480px) {
+            html {
+                font-size: 13px;
+            }
+
+            .sidebar {
+                width: 50px;
+            }
+
+            .main-content {
+                margin-left: 50px;
+                padding: 10px;
+            }
+
+            .logo i {
+                font-size: 20px;
+            }
+
+            .stat-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .stat-card i {
+                font-size: 28px;
+            }
+
+            .stat-info p {
+                font-size: 18px;
+            }
+
+            .supplier-list-title {
+                font-size: 14px;
+            }
+
+            .supplier-table th,
+            .supplier-table td {
+                padding: 8px 6px;
+                font-size: 11px;
+            }
+
+            .supplier-action-btn {
+                padding: 6px 8px;
+                font-size: 10px;
+                min-height: 32px;
+            }
+
+            .quotation-table th,
+            .quotation-table td {
+                padding: 8px 6px;
+                font-size: 11px;
+            }
+
+            .report-toolbar {
+                padding: 10px;
+            }
+
+            .report-toolbar-actions button {
+                min-height: 40px;
+                font-size: 12px;
+            }
+
+            .form-group input,
+            .form-group select,
+            .form-group textarea {
+                min-height: 42px;
+                font-size: 16px;
+            }
+
+            .btn-primary, .btn-secondary, .btn-danger, .btn-success {
+                min-height: 42px;
+                font-size: 13px;
+            }
+
+            .modal-content {
+                width: 95vw;
+                max-width: 320px;
+            }
+
+            .invoice-company-name {
+                font-size: 14px;
+            }
+
+            .invoice-type {
+                font-size: 12px;
+            }
+
+            .item-row-header {
+                display: none;
+            }
+
+            .item-row {
+                display: flex;
+                flex-direction: column;
+                border: 1px solid var(--border-color);
+                padding: 10px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+            }
+
+            .item-row input {
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+        }
+
+        /* Landscape Orientation on Mobile */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .sidebar {
+                width: 50px;
+            }
+
+            .main-content {
+                margin-left: 50px;
+                padding: 10px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .form-section {
+                padding: 12px;
             }
         }
 

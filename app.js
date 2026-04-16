@@ -79,7 +79,27 @@
             const username = usernameInput.value.trim();
             const password = passwordInput.value;
 
-            if (username !== ADMIN_LOGIN_USERNAME || password !== ADMIN_LOGIN_PASSWORD) {
+            let authenticated = false;
+            let authenticatedName = 'Admin';
+
+            if (isApiEnabled()) {
+                try {
+                    const authRows = await window.APIClient.getData('verifyAdmin', { username, password });
+                    const authRecord = Array.isArray(authRows) ? authRows[0] : null;
+                    if (authRecord && authRecord.authenticated) {
+                        authenticated = true;
+                        authenticatedName = authRecord.name || username || 'Admin';
+                    }
+                } catch (error) {
+                    console.error('Admin verification via API failed, using local fallback.', error);
+                }
+            }
+
+            if (!authenticated && username === ADMIN_LOGIN_USERNAME && password === ADMIN_LOGIN_PASSWORD) {
+                authenticated = true;
+            }
+
+            if (!authenticated) {
                 if (errorEl) errorEl.textContent = 'Invalid username or password.';
                 passwordInput.value = '';
                 passwordInput.focus();
@@ -87,7 +107,7 @@
             }
 
             sessionStorage.setItem(AUTH_SESSION_KEY, '1');
-            currentUser = { name: 'Admin', role: 'admin' };
+            currentUser = { name: authenticatedName, role: 'admin' };
             const sidebarName = document.getElementById('sidebarUsername');
             if (sidebarName) sidebarName.textContent = currentUser.name;
             if (errorEl) errorEl.textContent = '';
@@ -663,18 +683,104 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         async function syncProductsFromApi() {
-            const rows = await window.APIClient.getData('getProducts');
-            const normalizedProducts = rows.map(normalizeProductFromApi);
-            const productsToDelete = normalizedProducts.filter(product => REMOVED_PRODUCT_IDS.has(String(product.id || '')));
-            if (productsToDelete.length) {
-                await Promise.allSettled(productsToDelete.map(product => window.APIClient.postData('deleteProduct', { id: product.id })));
+            try {
+                const rows = await window.APIClient.getData('getProducts');
+                const normalizedProducts = rows.map(normalizeProductFromApi);
+                const productsToDelete = normalizedProducts.filter(product => REMOVED_PRODUCT_IDS.has(String(product.id || '')));
+                if (productsToDelete.length) {
+                    await Promise.allSettled(productsToDelete.map(product => window.APIClient.postData('deleteProduct', { id: product.id })));
+                }
+                savedProducts = filterRemovedProducts(normalizedProducts);
+            } catch (error) {
+                const message = String(error?.message || '');
+                if (/Unknown action:\s*getProducts/i.test(message)) {
+                    // Allow Supplier/Customer modules to continue when product endpoint is not deployed yet.
+                    savedProducts = [];
+                    if (window.APIClient?.showToast) {
+                        window.APIClient.showToast('Products API not deployed yet. Supplier data is still available.', 'error');
+                    }
+                    return;
+                }
+                throw error;
             }
-            savedProducts = filterRemovedProducts(normalizedProducts);
         }
 
         async function syncExpensesFromApi() {
             const rows = await window.APIClient.getData('getExpenses');
             expenses = rows.map(normalizeExpenseFromApi);
+        }
+
+        async function syncQuotationsFromApi() {
+            try {
+                const rows = await window.APIClient.getData('getQuotations');
+                quotations = rows.map(row => ({
+                    id: String(row.id || Date.now().toString()),
+                    quotationNo: row.quotation_no || row.quotationNo || '',
+                    customerId: row.customer_id || row.customerId || '',
+                    customerName: row.customer_name || row.customerName || '',
+                    date: row.date || '',
+                    subtotal: Number(row.subtotal || 0),
+                    total: Number(row.total || 0),
+                    discount: Number(row.discount || 0),
+                    vatRate: Number(row.vat || row.vatRate || 0),
+                    status: row.status || 'Uninvoiced',
+                    items: (function parseItems(raw) {
+                        if (typeof raw !== 'string') return raw || [];
+                        if (!raw) return [];
+                        try { return JSON.parse(raw); } catch (error) { return []; }
+                    })(row.items)
+                }));
+
+                const maxUsed = quotations.reduce((max, quotation) => {
+                    const match = String(quotation.quotationNo || '').match(/^QTN-(\d+)$/i);
+                    if (!match) return max;
+                    const parsed = parseInt(match[1], 10);
+                    return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+                }, 2000);
+                nextQuotationNumber = maxUsed + 1;
+            } catch (error) {
+                const message = String(error?.message || '');
+                if (/Unknown action:\s*getQuotations/i.test(message)) {
+                    // Keep app usable when quotations endpoint is not deployed yet.
+                    quotations = [];
+                    if (window.APIClient?.showToast) {
+                        window.APIClient.showToast('Quotations API not deployed yet. Dashboard and HR are still available.', 'error');
+                    }
+                    return;
+                }
+                throw error;
+            }
+        }
+
+        async function syncSettingsFromApi() {
+            const rows = await window.APIClient.getData('getSettings');
+            if (!Array.isArray(rows) || rows.length === 0) return;
+
+            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            rows.forEach(row => {
+                const key = String(row.key || '').trim();
+                if (!key) return;
+                const rawValue = row.value;
+                if (typeof rawValue === 'string') {
+                    try {
+                        settings[key] = JSON.parse(rawValue);
+                    } catch (error) {
+                        settings[key] = rawValue;
+                    }
+                } else {
+                    settings[key] = rawValue;
+                }
+            });
+            localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+        }
+
+        async function saveSettingsToApi(settings) {
+            if (!isApiEnabled()) return;
+            const payload = {};
+            Object.entries(settings || {}).forEach(([key, value]) => {
+                payload[key] = typeof value === 'string' ? value : JSON.stringify(value);
+            });
+            await window.APIClient.postData('upsertSettings', { settings: payload });
         }
 
         async function syncSuppliersFromApi() {
@@ -711,6 +817,32 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 status: row.status || 'Unpaid',
                 currency: row.currency || 'SAR'
             }));
+        }
+
+        async function syncSupplierPurchasesFromApi() {
+            const rows = await window.APIClient.getData('getSupplierPurchases');
+            const rebuilt = {};
+            rows.forEach(row => {
+                const supplierId = String(row.supplier_id || '');
+                if (!supplierId) return;
+                if (!rebuilt[supplierId]) rebuilt[supplierId] = [];
+                rebuilt[supplierId].push(normalizeSupplierPurchaseEntry({
+                    id: String(row.id || ''),
+                    supplierId,
+                    invoiceNo: row.invoice_no || '',
+                    date: row.purchase_date || row.date || '',
+                    productName: row.product_name || '',
+                    quantity: Number(row.quantity || 0),
+                    unitCost: Number(row.unit_price || 0),
+                    total: Number(row.total || 0),
+                    paidAmount: Number(row.paid_amount || 0),
+                    dueAmount: Number(row.due_amount || 0),
+                    status: row.status || 'Unpaid',
+                    note: row.notes || ''
+                }, supplierId));
+            });
+            supplierPurchaseHistory = rebuilt;
+            saveSupplierPurchaseHistory();
         }
 
         async function syncHRFromApi() {
@@ -776,26 +908,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         });
 
         async function loadData() {
-            if (isApiEnabled()) {
-                try {
-                    await syncCustomersFromApi();
-                    await Promise.all([
-                        syncSuppliersFromApi(),
-                        syncProductsFromApi(),
-                        syncInvoicesFromApi(),
-                        syncHRFromApi(),
-                        syncExpensesFromApi()
-                    ]);
-                    updateSupplierOptions();
-                    return;
-                } catch (error) {
-                    console.error('API load failed, switching to local cache:', error);
-                    if (window.APIClient?.showToast) {
-                        window.APIClient.showToast('API unavailable, using offline cache', 'error');
-                    }
-                }
-            }
-
             const stored = localStorage.getItem('pro_invoice_data');
             if (stored) {
                 const data = JSON.parse(stored);
@@ -811,6 +923,38 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 nextInvoiceNumber = data.nextInvoiceNumber || 2001;
                 nextQuotationNumber = data.nextQuotationNumber || 2001;
             }
+
+            if (isApiEnabled()) {
+                const startupSyncs = [
+                    { name: 'Customers', run: syncCustomersFromApi },
+                    { name: 'Settings', run: syncSettingsFromApi },
+                    { name: 'Suppliers', run: syncSuppliersFromApi },
+                    { name: 'Products', run: syncProductsFromApi },
+                    { name: 'Invoices', run: syncInvoicesFromApi },
+                    { name: 'Quotations', run: syncQuotationsFromApi },
+                    { name: 'HR', run: syncHRFromApi },
+                    { name: 'Expenses', run: syncExpensesFromApi },
+                    { name: 'SupplierPurchases', run: syncSupplierPurchasesFromApi }
+                ];
+
+                const results = await Promise.allSettled(startupSyncs.map(item => item.run()));
+                const failedSyncs = results
+                    .map((result, index) => ({ result, name: startupSyncs[index].name }))
+                    .filter(item => item.result.status === 'rejected')
+                    .map(item => item.name);
+
+                if (failedSyncs.length) {
+                    console.error('API partially available. Failed syncs:', failedSyncs);
+                    if (window.APIClient?.showToast) {
+                        window.APIClient.showToast(`API partially available (${failedSyncs.join(', ')}). Using cached data for missing modules.`, 'error');
+                    }
+                }
+
+                updateSupplierOptions();
+                saveData();
+                return;
+            }
+
             saveData();
         }
 
@@ -1655,8 +1799,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             supplier.dueAmount = Math.max(0, supplier.totalPurchase - supplier.totalPaid);
             supplier.lastPurchaseDate = purchaseDate;
 
+            const newPurchaseId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             addSupplierPurchaseHistoryEntry(currentSupplierId, {
-                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: newPurchaseId,
                 date: purchaseDate,
                 supplierId: currentSupplierId,
                 invoiceNo,
@@ -1672,6 +1817,34 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             if (isApiEnabled()) {
                 try {
+                    await window.APIClient.postData('addSupplierPurchase', {
+                        purchase: {
+                            id: newPurchaseId,
+                            supplier_id: currentSupplierId,
+                            product_name: productName,
+                            quantity,
+                            unit_price: unitCost,
+                            total: amount,
+                            vat_amount: 0,
+                            vat_rate: 0,
+                            paid_amount: 0,
+                            due_amount: amount,
+                            purchase_date: purchaseDate,
+                            due_date: '',
+                            status: 'Unpaid',
+                            notes: purchaseNote
+                        }
+                    });
+                    await window.APIClient.postData('addSupplierTransaction', {
+                        transaction: {
+                            id: `ST-${Date.now()}`,
+                            supplier_id: currentSupplierId,
+                            type: 'Purchase',
+                            amount,
+                            date: purchaseDate,
+                            note: `Purchase: ${invoiceNo} - ${productName}`
+                        }
+                    });
                     await window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) });
                     await syncSuppliersFromApi();
                 } catch (error) {
@@ -1812,6 +1985,48 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             if (isApiEnabled()) {
                 try {
+                    const nextPaidAmount = Number(purchaseEntry.paidAmount || 0) + amount;
+                    const nextDueAmount = Math.max(0, Number(purchaseEntry.dueAmount || 0) - amount);
+                    await window.APIClient.postData('addSupplierPayment', {
+                        payment: {
+                            id: paymentRecordId,
+                            supplier_id: currentSupplierId,
+                            purchase_id: currentSupplierPaymentEntryId,
+                            voucher_no: voucherNo,
+                            amount,
+                            payment_date: payDate,
+                            payment_method: 'Cash',
+                            notes: paymentNote
+                        }
+                    });
+                    await window.APIClient.postData('updateSupplierPurchase', {
+                        purchase: {
+                            id: currentSupplierPaymentEntryId,
+                            supplier_id: currentSupplierId,
+                            product_name: purchaseEntry.productName || '',
+                            quantity: purchaseEntry.quantity || 0,
+                            unit_price: purchaseEntry.unitCost || 0,
+                            total: purchaseEntry.total || 0,
+                            vat_amount: 0,
+                            vat_rate: 0,
+                            paid_amount: nextPaidAmount,
+                            due_amount: nextDueAmount,
+                            purchase_date: purchaseEntry.date || '',
+                            due_date: '',
+                            status: nextDueAmount <= 0 ? 'Paid' : 'Partial',
+                            notes: purchaseEntry.note || ''
+                        }
+                    });
+                    await window.APIClient.postData('addSupplierTransaction', {
+                        transaction: {
+                            id: `ST-${Date.now()}`,
+                            supplier_id: currentSupplierId,
+                            type: 'Payment',
+                            amount,
+                            date: payDate,
+                            note: `Payment: ${voucherNo} for invoice ${purchaseEntry.invoiceNo || ''}`
+                        }
+                    });
                     await window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) });
                     await syncSuppliersFromApi();
                 } catch (error) {
@@ -3286,10 +3501,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         // ==================== QUOTATIONS ====================
-        function showQuotations() {
+        async function showQuotations() {
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('quotationsView').style.display = 'block';
             setActiveNav('navQuotations');
+            if (isApiEnabled()) {
+                try {
+                    await syncQuotationsFromApi();
+                } catch (error) {
+                    console.error('Failed to sync quotations from API.', error);
+                }
+            }
             document.getElementById('quotationSearchInput')?.focus();
             renderQuotations();
         }
@@ -3373,11 +3595,33 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             renderQuotations();
         }
 
-        function toggleQuotationStatus(id) {
+        async function toggleQuotationStatus(id) {
             const quotation = quotations.find(q => q.id === id);
             if (!quotation) return;
             quotation.status = quotation.status === 'Invoice' ? 'Uninvoiced' : 'Invoice';
-            saveData();
+            if (isApiEnabled()) {
+                try {
+                    await window.APIClient.postData('updateQuotation', {
+                        quotation: {
+                            id: quotation.id,
+                            quotation_no: quotation.quotationNo,
+                            customer_id: quotation.customerId || '',
+                            customer_name: quotation.customerName || '',
+                            date: quotation.date || '',
+                            subtotal: Number(quotation.subtotal || quotation.total || 0),
+                            total: Number(quotation.total || quotation.subtotal || 0),
+                            vat: Number(quotation.vatRate || 0),
+                            discount: Number(quotation.discount || 0),
+                            status: quotation.status || 'Uninvoiced',
+                            items: JSON.stringify(Array.isArray(quotation.items) ? quotation.items : [])
+                        }
+                    });
+                } catch (error) {
+                    console.error('Failed to update quotation status in API.', error);
+                }
+            } else {
+                saveData();
+            }
             renderQuotations();
         }
 
@@ -3424,7 +3668,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('quotationNoDisplay').value = `QTN-${nextQuotationNumber}`;
         }
 
-        function saveQuotation() {
+        async function saveQuotation() {
             const customerName = document.getElementById('quotationCustomerSelect').value;
             if (!customerName) {
                 alert('Please select a customer');
@@ -3448,6 +3692,29 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             };
             
             quotations.push(quotation);
+
+            if (isApiEnabled()) {
+                try {
+                    await window.APIClient.postData('addQuotation', {
+                        quotation: {
+                            id: quotation.id,
+                            quotation_no: quotation.quotationNo,
+                            customer_id: quotation.customerId || '',
+                            customer_name: quotation.customerName,
+                            date: quotation.date,
+                            subtotal: quotation.subtotal,
+                            total: quotation.total,
+                            vat: Number(quotation.vatRate || 0),
+                            discount: Number(quotation.discount || 0),
+                            status: quotation.status,
+                            items: JSON.stringify(quotation.items || [])
+                        }
+                    });
+                } catch (error) {
+                    console.error('Failed to save quotation in API.', error);
+                }
+            }
+
             nextQuotationNumber++;
             saveData();
             showQuotations();
@@ -3506,9 +3773,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             setTimeout(() => sendQuotationEmail(), 200);
         }
 
-        function deleteQuotation(id) {
+        async function deleteQuotation(id) {
             const index = quotations.findIndex(q => q.id === id);
             if (index !== -1 && confirm('Delete this quotation?')) {
+                if (isApiEnabled()) {
+                    try {
+                        await window.APIClient.postData('deleteQuotation', { id });
+                    } catch (error) {
+                        console.error('Failed to delete quotation from API.', error);
+                    }
+                }
                 quotations.splice(index, 1);
                 saveData();
                 showQuotations();
@@ -3561,6 +3835,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         syncProductsFromApi(),
                         syncInvoicesFromApi(),
                         syncHRFromApi(),
+                        syncSupplierPurchasesFromApi(),
                         syncExpensesFromApi()
                     ]);
                     updateReportDataSourceStatus();
@@ -4835,6 +5110,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 reader.onload = function(e) {
                     settings.companyLogo = e.target.result;
                     localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+                    saveSettingsToApi(settings).catch(error => {
+                        console.error('Failed to sync settings to API.', error);
+                    });
                     setVatTaxEnabled(settings.vatTaxEnabled);
                     applySidebarBranding();
                     alert('Settings saved!');
@@ -4844,6 +5122,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return;
             }
             localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+            saveSettingsToApi(settings).catch(error => {
+                console.error('Failed to sync settings to API.', error);
+            });
             setVatTaxEnabled(settings.vatTaxEnabled);
             applySidebarBranding();
             alert('Settings saved!');
