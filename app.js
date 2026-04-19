@@ -5306,6 +5306,69 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
         }
 
+        function driveShareLinkToDirectUrl(link) {
+            if (!link) return '';
+            link = link.trim();
+            // Already a direct/thumbnail URL — return as-is
+            if (/drive\.google\.com\/(uc|thumbnail)\?/.test(link)) return link;
+            // Extract file ID from various Drive link formats:
+            // https://drive.google.com/file/d/FILE_ID/view
+            // https://drive.google.com/open?id=FILE_ID
+            // https://drive.google.com/uc?id=FILE_ID
+            let match = link.match(/\/file\/d\/([A-Za-z0-9_-]+)/);
+            if (!match) match = link.match(/[?&]id=([A-Za-z0-9_-]+)/);
+            if (!match) match = link.match(/\/d\/([A-Za-z0-9_-]+)/);
+            if (match && match[1]) {
+                return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
+            }
+            return '';
+        }
+
+        function extractDriveFolderId(link) {
+            if (!link) return '';
+            const text = String(link).trim();
+            let match = text.match(/\/folders\/([A-Za-z0-9_-]+)/);
+            if (!match) match = text.match(/[?&]id=([A-Za-z0-9_-]+)/);
+            return match && match[1] ? match[1] : '';
+        }
+
+        function applyDriveLogoLink() {
+            const input = document.getElementById('driveLogoLinkInput');
+            if (!input) return;
+            const rawLink = input.value;
+            const folderId = extractDriveFolderId(rawLink);
+            const url = driveShareLinkToDirectUrl(rawLink);
+
+            if (folderId && !url) {
+                const folderInput = document.getElementById('companyLogoDriveFolderId');
+                if (folderInput) {
+                    folderInput.value = folderId;
+                }
+                const settings = readStoredJson('pro_invoice_settings', {});
+                settings.companyLogoDriveFolderId = folderId;
+                localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+                window.APIClient?.showToast?.('Folder detected. Folder ID saved. Now paste the share link of the image file inside that folder.', 'success');
+                input.value = '';
+                return;
+            }
+
+            if (!url) {
+                alert('Could not extract a file ID from that link. Make sure you copied a Google Drive file share link.');
+                return;
+            }
+            pendingCompanyLogoData = '';
+            const logoPreview = document.getElementById('companyLogoPreview');
+            if (logoPreview) {
+                logoPreview.innerHTML = `<img src="${url}" alt="Drive Logo" style="max-width:120px;max-height:80px;" onerror="this.style.display='none';this.nextSibling.style.display='block'"><span style="display:none;color:#b91c1c;font-size:12px;">Image failed to load \u2014 make sure sharing is set to &ldquo;Anyone with the link&rdquo;.</span>`;
+            }
+            const settings = readStoredJson('pro_invoice_settings', {});
+            settings.companyLogo = url;
+            localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+            applySidebarBranding();
+            window.APIClient?.showToast?.('Drive logo applied! Click Save Settings to persist all changes.', 'success');
+            input.value = '';
+        }
+
         function readFileAsDataUrl(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
