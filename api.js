@@ -203,10 +203,16 @@ try {
         }
     }
 
+    async function postDataSilent(action, data) {
+        const payload = Object.assign({ action: action }, data || {});
+        return await request(payload);
+    }
+
     global.APIClient = {
         isConfigured,
         getData,
         postData,
+        postDataSilent,
         showToast,
         showLoading,
         hideLoading,

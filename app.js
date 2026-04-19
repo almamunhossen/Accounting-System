@@ -5325,7 +5325,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         async function uploadCompanyLogoToApi(dataUrl, folderId, fileName = 'company-logo.png') {
             if (!isApiEnabled() || !dataUrl) return dataUrl;
             try {
-                const response = await window.APIClient.postData('uploadCompanyLogo', {
+                const response = await window.APIClient.postDataSilent('uploadCompanyLogo', {
                     dataUrl,
                     folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
                     fileName
@@ -5333,10 +5333,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return response?.data?.direct_url || response?.data?.web_url || dataUrl;
             } catch (error) {
                 // Always fall back to local data URL — API may be unreachable or action not deployed.
-                const msg = isUnknownApiActionError(error, 'uploadCompanyLogo')
-                    ? 'uploadCompanyLogo is not deployed yet. Saving logo locally.'
-                    : 'API unavailable. Logo saved locally.';
-                window.APIClient?.showToast?.(msg, 'error');
+                window.APIClient?.showToast?.('Logo saved locally (API unavailable).', 'error');
                 return dataUrl;
             }
         }
@@ -5344,7 +5341,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         async function uploadEmployeeProfilePhotoToApi(dataUrl, folderId, fileName = 'employee-photo.png') {
             if (!isApiEnabled() || !dataUrl) return dataUrl;
             try {
-                const response = await window.APIClient.postData('uploadEmployeeProfilePhoto', {
+                const response = await window.APIClient.postDataSilent('uploadEmployeeProfilePhoto', {
                     dataUrl,
                     folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
                     fileName
@@ -5352,10 +5349,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return response?.data?.direct_url || response?.data?.web_url || dataUrl;
             } catch (error) {
                 // Always fall back to local data URL — API may be unreachable or action not deployed.
-                const msg = isUnknownApiActionError(error, 'uploadEmployeeProfilePhoto')
-                    ? 'uploadEmployeeProfilePhoto is not deployed yet. Saving photo locally.'
-                    : 'API unavailable. Photo saved locally.';
-                window.APIClient?.showToast?.(msg, 'error');
+                window.APIClient?.showToast?.('Photo saved locally (API unavailable).', 'error');
                 return dataUrl;
             }
         }
