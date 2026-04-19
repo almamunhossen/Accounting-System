@@ -1,10 +1,10 @@
 // API client for Google Apps Script backend
 // Set your deployed Apps Script Web App URL here.
-window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycby95Ut1SU6Aw-3PXnr_JH2Tz2-1CnGWP42T8JGE7qtf8pNicwfTIJxnqBZ9h8HGO1aYoA/exec";
+window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycbx7Y97A400SK9ZcL_lMp8N-9sVDtpahOJxULb1OjXvaoSViM--ojR_hGnGL9dbX6EYkIQ/exec";
 
 try {
     const persistedApiUrl = localStorage.getItem("gs_api_url") || "";
-    if (!window.API_URL && persistedApiUrl) {
+    if (persistedApiUrl) {
         window.API_URL = persistedApiUrl;
     }
 } catch (error) {
@@ -13,9 +13,61 @@ try {
 
 (function attachApiClient(global) {
     const warnedMissingActions = new Set();
+    const API_UNAVAILABLE_UNTIL_KEY = "gs_api_unavailable_until";
+    const API_UNAVAILABLE_WINDOW_MS = 5 * 60 * 1000;
+
+    function normalizeApiUrl(url) {
+        return String(url || "").trim().replace(/\s+/g, "");
+    }
+
+    function getApiUnavailableUntil() {
+        try {
+            const raw = sessionStorage.getItem(API_UNAVAILABLE_UNTIL_KEY);
+            return Number(raw || 0);
+        } catch (error) {
+            return 0;
+        }
+    }
+
+    function markApiUnavailable() {
+        const until = Date.now() + API_UNAVAILABLE_WINDOW_MS;
+        try {
+            sessionStorage.setItem(API_UNAVAILABLE_UNTIL_KEY, String(until));
+        } catch (error) {
+            // Ignore storage errors.
+        }
+    }
+
+    function clearApiUnavailable() {
+        try {
+            sessionStorage.removeItem(API_UNAVAILABLE_UNTIL_KEY);
+        } catch (error) {
+            // Ignore storage errors.
+        }
+    }
+
+    function isApiTemporarilyUnavailable() {
+        const until = getApiUnavailableUntil();
+        return until > Date.now();
+    }
+
+    function getFriendlyNetworkMessage(error) {
+        const message = String((error && error.message) || error || "");
+        if ((error && error.name) === "AbortError") {
+            return "API request timed out. Please check internet and Apps Script deployment status.";
+        }
+        if (/Failed to fetch|NetworkError|Load failed/i.test(message)) {
+            return "Failed to reach API. Check API URL, internet, and Apps Script Web App access (Execute as Me, Who has access: Anyone).";
+        }
+        return message || "Network request failed";
+    }
 
     function isConfigured() {
-        return typeof global.API_URL === "string" && /^https?:\/\//i.test(global.API_URL);
+        const url = normalizeApiUrl(global.API_URL);
+        global.API_URL = url;
+        if (!/^https?:\/\//i.test(url)) return false;
+        if (isApiTemporarilyUnavailable()) return false;
+        return true;
     }
 
     function getMissingActionName(message) {
@@ -25,32 +77,6 @@ try {
     }
 
     function ensureUiHelpers() {
-        if (!document.getElementById("globalLoadingOverlay")) {
-            const overlay = document.createElement("div");
-            overlay.id = "globalLoadingOverlay";
-            overlay.className = "global-loading-overlay";
-            overlay.innerHTML = [
-                "<div class='global-loading-card' role='status' aria-live='polite' aria-label='Loading'>",
-                "  <div class='global-loading-spinner' aria-hidden='true'>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "    <span class='global-loading-dot'></span>",
-                "  </div>",
-                "  <span class='global-loading-text'>LOADING.IO</span>",
-                "</div>"
-            ].join("");
-            document.body.appendChild(overlay);
-        }
-
         if (!document.getElementById("globalToast")) {
             const toast = document.createElement("div");
             toast.id = "globalToast";
@@ -60,14 +86,11 @@ try {
     }
 
     function showLoading() {
-        ensureUiHelpers();
-        const el = document.getElementById("globalLoadingOverlay");
-        if (el) el.style.display = "flex";
+        // Loading overlay disabled by request.
     }
 
     function hideLoading() {
-        const el = document.getElementById("globalLoadingOverlay");
-        if (el) el.style.display = "none";
+        // Loading overlay disabled by request.
     }
 
     function showToast(message, type) {
@@ -86,22 +109,59 @@ try {
 
     async function request(payload) {
         if (!isConfigured()) {
-            return { success: false, message: "API_URL is not configured.", data: [] };
+            const tempDown = isApiTemporarilyUnavailable();
+            throw new Error(
+                tempDown
+                    ? "API temporarily unavailable. Using local cached mode."
+                    : "API_URL is not configured."
+            );
         }
 
-        const res = await fetch(global.API_URL, {
-            method: "POST",
-            body: JSON.stringify(payload)
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        let res;
+
+        try {
+            res = await fetch(global.API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "text/plain;charset=utf-8",
+                    "Accept": "application/json, text/plain, */*"
+                },
+                body: JSON.stringify(payload),
+                redirect: "follow",
+                signal: controller.signal
+            });
+        } catch (error) {
+            markApiUnavailable();
+            throw new Error(getFriendlyNetworkMessage(error));
+        } finally {
+            clearTimeout(timeoutId);
+        }
+
+        const responseText = await res.text();
 
         if (!res.ok) {
+            markApiUnavailable();
             throw new Error("API request failed with status " + res.status);
         }
 
-        const json = await res.json();
+        let json;
+        try {
+            json = JSON.parse(responseText);
+        } catch (error) {
+            if (/<!doctype html|<html/i.test(responseText)) {
+                markApiUnavailable();
+                throw new Error("API returned HTML instead of JSON. Redeploy Apps Script Web App and set access to Anyone.");
+            }
+            markApiUnavailable();
+            throw new Error("API returned invalid JSON response.");
+        }
+
         if (!json || json.success === false) {
             throw new Error((json && json.message) || "API returned an error");
         }
+        clearApiUnavailable();
         return json;
     }
 
@@ -151,8 +211,9 @@ try {
         showLoading,
         hideLoading,
         setApiUrl: function setApiUrl(url) {
-            const nextUrl = String(url || "").trim();
+            const nextUrl = normalizeApiUrl(url);
             global.API_URL = nextUrl;
+            clearApiUnavailable();
             try {
                 if (nextUrl) {
                     localStorage.setItem("gs_api_url", nextUrl);

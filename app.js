@@ -46,9 +46,12 @@
         const ADMIN_LOGIN_USERNAME = 'amhsumon';
         const ADMIN_LOGIN_PASSWORD = '@mHs#3030';
         const AUTH_SESSION_KEY = 'pro_invoice_admin_auth';
+        const AUTH_PERSIST_KEY = 'pro_invoice_admin_auth_persist';
+        const AUTH_PERSIST_TTL_MS = 12 * 60 * 60 * 1000;
         const LOGIN_SECURITY_KEY = 'pro_invoice_login_security';
         const LOGIN_MAX_ATTEMPTS = 5;
         const LOGIN_LOCK_MS = 5 * 60 * 1000;
+        const API_UNREACHABLE_TOAST_KEY = 'pro_invoice_api_unreachable_toast_shown';
         const REMOVED_PRODUCT_IDS = new Set([
             '1776260800498-gb5fz1',
             '1776260800498-wd8as6',
@@ -67,8 +70,83 @@
             if (appRoot) appRoot.style.display = isAuthenticated ? 'flex' : 'none';
         }
 
+        function applyBrandLogo(imgEl, iconEl, logoUrl) {
+            if (!imgEl && !iconEl) return;
+
+            const normalizedLogoUrl = String(logoUrl || '').trim();
+            if (!normalizedLogoUrl) {
+                if (imgEl) {
+                    imgEl.removeAttribute('src');
+                    imgEl.style.display = 'none';
+                }
+                if (iconEl) iconEl.style.display = 'inline-block';
+                return;
+            }
+
+            if (imgEl) {
+                imgEl.onerror = function handleBrandLogoError() {
+                    imgEl.removeAttribute('src');
+                    imgEl.style.display = 'none';
+                    if (iconEl) iconEl.style.display = 'inline-block';
+                };
+                imgEl.onload = function handleBrandLogoLoad() {
+                    imgEl.style.display = 'block';
+                    if (iconEl) iconEl.style.display = 'none';
+                };
+                imgEl.src = normalizedLogoUrl;
+                imgEl.style.display = 'block';
+            }
+
+            if (iconEl) iconEl.style.display = 'none';
+        }
+
+        function readStoredJson(key, fallbackValue) {
+            try {
+                const raw = localStorage.getItem(String(key || ''));
+                if (!raw) return fallbackValue;
+                return JSON.parse(raw);
+            } catch (error) {
+                return fallbackValue;
+            }
+        }
+
         function isAdminAuthenticated() {
-            return sessionStorage.getItem(AUTH_SESSION_KEY) === '1';
+            if (sessionStorage.getItem(AUTH_SESSION_KEY) === '1') return true;
+            try {
+                const raw = localStorage.getItem(AUTH_PERSIST_KEY);
+                if (!raw) return false;
+                const parsed = JSON.parse(raw);
+                const expiresAt = Number(parsed && parsed.expiresAt || 0);
+                if (!expiresAt || Date.now() > expiresAt) {
+                    localStorage.removeItem(AUTH_PERSIST_KEY);
+                    return false;
+                }
+                sessionStorage.setItem(AUTH_SESSION_KEY, '1');
+                return true;
+            } catch (error) {
+                localStorage.removeItem(AUTH_PERSIST_KEY);
+                return false;
+            }
+        }
+
+        function persistAdminAuth() {
+            sessionStorage.setItem(AUTH_SESSION_KEY, '1');
+            try {
+                localStorage.setItem(AUTH_PERSIST_KEY, JSON.stringify({
+                    expiresAt: Date.now() + AUTH_PERSIST_TTL_MS
+                }));
+            } catch (error) {
+                console.warn('Unable to persist admin auth state:', error);
+            }
+        }
+
+        function clearAdminAuth() {
+            sessionStorage.removeItem(AUTH_SESSION_KEY);
+            try {
+                localStorage.removeItem(AUTH_PERSIST_KEY);
+            } catch (error) {
+                console.warn('Unable to clear admin auth state:', error);
+            }
         }
 
         function getLoginSecurityState() {
@@ -204,13 +282,20 @@
             }
 
             clearLoginSecurityState();
-            sessionStorage.setItem(AUTH_SESSION_KEY, '1');
+            persistAdminAuth();
             currentUser = { name: authenticatedName, role: 'admin' };
             const sidebarName = document.getElementById('sidebarUsername');
             if (sidebarName) sidebarName.textContent = currentUser.name;
             if (errorEl) errorEl.textContent = '';
 
-            await initializeAppAfterLogin();
+            try {
+                await initializeAppAfterLogin();
+            } catch (error) {
+                console.error('Initialization failed after login; continuing with cached data.', error);
+                if (window.APIClient?.showToast) {
+                    window.APIClient.showToast('API sync failed. Continuing with cached data.', 'error');
+                }
+            }
             setAuthGateState(true);
             if (submitBtn) submitBtn.disabled = false;
         }
@@ -856,7 +941,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const rows = await window.APIClient.getData('getSettings');
             if (!Array.isArray(rows) || rows.length === 0) return;
 
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             rows.forEach(row => {
                 const key = String(row.key || '').trim();
                 if (!key) return;
@@ -889,7 +974,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
                 // Backward compatibility for older deployments: save one setting at a time.
                 for (const [key, value] of Object.entries(payload)) {
-                    await window.APIClient.postData('upsertSetting', { key, value });
+                    try {
+                        await window.APIClient.postData('upsertSetting', { key, value });
+                    } catch (singleError) {
+                        const singleMessage = String(singleError?.message || singleError || '');
+                        if (/Unknown action:\s*(upsertSetting|saveSetting)/i.test(singleMessage)) {
+                            window.APIClient?.showToast?.('Settings API save action is not deployed yet. Settings saved locally for now.', 'error');
+                            return;
+                        }
+                        throw singleError;
+                    }
                 }
             }
         }
@@ -1024,7 +1118,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (sidebarName) sidebarName.textContent = currentUser.name;
 
             if (isAdminAuthenticated()) {
-                await initializeAppAfterLogin();
+                try {
+                    await initializeAppAfterLogin();
+                } catch (error) {
+                    console.error('Initialization failed on refresh; keeping authenticated session.', error);
+                    if (window.APIClient?.showToast) {
+                        window.APIClient.showToast('API sync failed on refresh. Signed in with cached data.', 'error');
+                    }
+                }
                 setAuthGateState(true);
                 return;
             }
@@ -1033,10 +1134,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (usernameInput) usernameInput.focus();
         });
 
+        window.addEventListener('load', applySidebarBranding);
+
         async function loadData() {
-            const stored = localStorage.getItem('pro_invoice_data');
-            if (stored) {
-                const data = JSON.parse(stored);
+            const data = readStoredJson('pro_invoice_data', null);
+            if (data && typeof data === 'object') {
                 customers = data.customers || [];
                 suppliers = data.suppliers || [];
                 invoices = data.invoices || [];
@@ -1064,15 +1166,36 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 ];
 
                 const results = await Promise.allSettled(startupSyncs.map(item => item.run()));
-                const failedSyncs = results
+                const failedEntries = results
                     .map((result, index) => ({ result, name: startupSyncs[index].name }))
-                    .filter(item => item.result.status === 'rejected')
-                    .map(item => item.name);
+                    .filter(item => item.result.status === 'rejected');
+                const failedSyncs = failedEntries.map(item => item.name);
 
                 if (failedSyncs.length) {
                     console.error('API partially available. Failed syncs:', failedSyncs);
                     if (window.APIClient?.showToast) {
-                        window.APIClient.showToast(`API partially available (${failedSyncs.join(', ')}). Using cached data for missing modules.`, 'error');
+                        const allFailed = failedSyncs.length === startupSyncs.length;
+                        const failureMessages = failedEntries.map(item => String(item?.result?.reason?.message || item?.result?.reason || ''));
+                        const unreachablePattern = /Failed to reach API|Failed to fetch|NetworkError|Load failed|API returned HTML instead of JSON|API request failed with status/i;
+                        const likelyUnreachable = allFailed || (failureMessages.length > 0 && failureMessages.every(msg => unreachablePattern.test(msg)));
+
+                        if (likelyUnreachable) {
+                            let shouldShowToast = true;
+                            try {
+                                shouldShowToast = sessionStorage.getItem(API_UNREACHABLE_TOAST_KEY) !== '1';
+                                if (shouldShowToast) {
+                                    sessionStorage.setItem(API_UNREACHABLE_TOAST_KEY, '1');
+                                }
+                            } catch (error) {
+                                // Ignore sessionStorage errors and continue.
+                            }
+
+                            if (shouldShowToast) {
+                                window.APIClient.showToast('API is currently unreachable. Using cached local data.', 'error');
+                            }
+                        } else {
+                            window.APIClient.showToast(`API partially available (${failedSyncs.join(', ')}). Using cached data for missing modules.`, 'error');
+                        }
                     }
                 }
 
@@ -1085,7 +1208,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function applySidebarBranding() {
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const logoImg = document.getElementById('sidebarLogoImg');
             const logoIcon = document.getElementById('sidebarLogoIcon');
             const companyNameEl = document.getElementById('sidebarCompanyName');
@@ -1101,27 +1224,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 loginCompanyNameEl.textContent = companyName;
             }
 
-            if (settings.companyLogo && logoImg) {
-                logoImg.src = settings.companyLogo;
-                logoImg.style.display = 'block';
-                if (logoIcon) logoIcon.style.display = 'none';
-                if (loginLogoImg) {
-                    loginLogoImg.src = settings.companyLogo;
-                    loginLogoImg.style.display = 'block';
-                }
-                if (loginLogoIcon) loginLogoIcon.style.display = 'none';
-            } else {
-                if (logoImg) {
-                    logoImg.removeAttribute('src');
-                    logoImg.style.display = 'none';
-                }
-                if (logoIcon) logoIcon.style.display = 'inline-block';
-                if (loginLogoImg) {
-                    loginLogoImg.removeAttribute('src');
-                    loginLogoImg.style.display = 'none';
-                }
-                if (loginLogoIcon) loginLogoIcon.style.display = 'inline-block';
-            }
+            applyBrandLogo(logoImg, logoIcon, settings.companyLogo);
+            applyBrandLogo(loginLogoImg, loginLogoIcon, settings.companyLogo);
         }
 
         function saveData() {
@@ -5144,7 +5248,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('settingsView').style.display = 'block';
             setActiveNav('navSettings');
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             document.getElementById('companyName').value = settings.companyName || '';
             document.getElementById('companyVatNumber').value = settings.companyVatNumber || '';
             document.getElementById('companyMobile').value = settings.companyMobile || '';
@@ -5211,24 +5315,47 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             });
         }
 
+        function isUnknownApiActionError(error, actionName) {
+            const message = String((error && error.message) || error || '');
+            if (!actionName) return /Unknown action:\s*[A-Za-z0-9_]+/i.test(message);
+            const escaped = String(actionName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(`Unknown action:\\s*${escaped}\\b`, 'i').test(message);
+        }
+
         async function uploadCompanyLogoToApi(dataUrl, folderId, fileName = 'company-logo.png') {
             if (!isApiEnabled() || !dataUrl) return dataUrl;
-            const response = await window.APIClient.postData('uploadCompanyLogo', {
-                dataUrl,
-                folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
-                fileName
-            });
-            return response?.data?.direct_url || response?.data?.web_url || dataUrl;
+            try {
+                const response = await window.APIClient.postData('uploadCompanyLogo', {
+                    dataUrl,
+                    folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
+                    fileName
+                });
+                return response?.data?.direct_url || response?.data?.web_url || dataUrl;
+            } catch (error) {
+                if (isUnknownApiActionError(error, 'uploadCompanyLogo')) {
+                    window.APIClient?.showToast?.('uploadCompanyLogo is not deployed yet. Saving logo locally for now.', 'error');
+                    return dataUrl;
+                }
+                throw error;
+            }
         }
 
         async function uploadEmployeeProfilePhotoToApi(dataUrl, folderId, fileName = 'employee-photo.png') {
             if (!isApiEnabled() || !dataUrl) return dataUrl;
-            const response = await window.APIClient.postData('uploadEmployeeProfilePhoto', {
-                dataUrl,
-                folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
-                fileName
-            });
-            return response?.data?.direct_url || response?.data?.web_url || dataUrl;
+            try {
+                const response = await window.APIClient.postData('uploadEmployeeProfilePhoto', {
+                    dataUrl,
+                    folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
+                    fileName
+                });
+                return response?.data?.direct_url || response?.data?.web_url || dataUrl;
+            } catch (error) {
+                if (isUnknownApiActionError(error, 'uploadEmployeeProfilePhoto')) {
+                    window.APIClient?.showToast?.('uploadEmployeeProfilePhoto is not deployed yet. Saving photo locally for now.', 'error');
+                    return dataUrl;
+                }
+                throw error;
+            }
         }
 
         async function saveSettings() {
@@ -5245,7 +5372,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 .replace(/^(<br\s*\/?>\s*)+|(<br\s*\/?>\s*)+$/gi, '');
             const logoInput = document.getElementById('companyLogoInput');
             const vatTaxToggle = document.getElementById('vatTaxEnabledToggle');
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             settings.companyName = name;
             settings.companyVatNumber = vat;
             settings.companyMobile = mobile;
@@ -6419,7 +6546,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
         function logout() {
             if (!confirm('Logout?')) return;
-            sessionStorage.removeItem(AUTH_SESSION_KEY);
+            clearAdminAuth();
             location.reload();
         }
 
@@ -6441,14 +6568,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Customers');
             XLSX.writeFile(wb, `customers_${new Date().toISOString().split('T')[0]}.xlsx`);
-}
-
-const input = document.getElementById("companyAddress");
-  const output = document.getElementById("output");
-
-  input.addEventListener("input", () => {
-    output.innerHTML = input.value;
-  });
+                }
 
         // Missing contact modal functions
         function sendWhatsAppToCustomer() {
