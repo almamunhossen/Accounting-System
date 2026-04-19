@@ -1,4 +1,16 @@
 ﻿  // ==================== DATA STORAGE ====================
+        function toggleLoginPassword(btn) {
+            const input = btn.closest('.login-field').querySelector('.login-input');
+            const icon = btn.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+            }
+        }
+
         let customers = [];
         let suppliers = [];
         let invoices = [];
@@ -132,9 +144,9 @@
         }
 
         function getNextCustomerNumericId() {
-            const baseStart = 1999;
+            const baseStart = 2000;
             const maxUsed = customers.reduce((max, customer) => {
-                const match = String(customer?.id || '').match(/^CID-(\d+)$/i);
+                const match = String(customer?.id || '').match(/^CUST-(\d+)$/i);
                 if (!match) return max;
                 const parsed = parseInt(match[1], 10);
                 return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
@@ -143,7 +155,7 @@
         }
 
         function generateCustomerCode() {
-            return `CID-${getNextCustomerNumericId()}`;
+            return `CUST-${getNextCustomerNumericId()}`;
         }
 
         function getNextProductNumericId() {
@@ -219,6 +231,7 @@
                 status: customer.status || 'Active',
                 total_purchase: Number(customer.totalSpent || 0),
                 total_paid: Number(customer.totalPaid || 0),
+                due_amount: Number(customer.dueAmount || 0),
                 due: Number(customer.dueAmount || 0),
                 last_payment_date: customer.lastPaymentDate || '',
                 last_contact: customer.lastContact || '',
@@ -1150,6 +1163,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             currentCustomerId = null;
             document.getElementById('customerModalTitle').innerText = 'Add Customer';
             document.getElementById('customerForm').reset();
+            const nextId = generateCustomerCode();
+            document.getElementById('customerIdDisplay').value = nextId;
             document.getElementById('customerModal').style.display = 'flex';
         }
 
@@ -1158,6 +1173,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (customer) {
                 currentCustomerId = id;
                 document.getElementById('customerModalTitle').innerText = 'Edit Customer';
+                document.getElementById('customerIdDisplay').value = id;
                 document.getElementById('customerName').value = customer.name;
                 document.getElementById('customerPhone').value = customer.phone || '';
                 document.getElementById('customerEmail').value = customer.email || '';
@@ -1182,10 +1198,12 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (!confirm('Delete this customer?')) return;
             if (isApiEnabled()) {
                 try {
-                    await window.APIClient.postData('deleteCustomer', { id: id });
+                    await window.APIClient.postData('deleteCustomer', { customer_id: id });
                     await syncCustomersFromApi();
+                    window.APIClient.showToast('Customer deleted successfully', 'success');
                 } catch (error) {
                     console.error('Customer API delete failed:', error);
+                    window.APIClient.showToast('Failed to delete customer', 'error');
                     return;
                 }
             } else {

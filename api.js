@@ -28,8 +28,26 @@ try {
         if (!document.getElementById("globalLoadingOverlay")) {
             const overlay = document.createElement("div");
             overlay.id = "globalLoadingOverlay";
-            overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:3000;";
-            overlay.innerHTML = "<div style='background:#fff;padding:14px 18px;border-radius:10px;font-weight:600;'>Loading...</div>";
+            overlay.className = "global-loading-overlay";
+            overlay.innerHTML = [
+                "<div class='global-loading-card' role='status' aria-live='polite' aria-label='Loading'>",
+                "  <div class='global-loading-spinner' aria-hidden='true'>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "    <span class='global-loading-dot'></span>",
+                "  </div>",
+                "  <span class='global-loading-text'>LOADING.IO</span>",
+                "</div>"
+            ].join("");
             document.body.appendChild(overlay);
         }
 
