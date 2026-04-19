@@ -5332,11 +5332,12 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 });
                 return response?.data?.direct_url || response?.data?.web_url || dataUrl;
             } catch (error) {
-                if (isUnknownApiActionError(error, 'uploadCompanyLogo')) {
-                    window.APIClient?.showToast?.('uploadCompanyLogo is not deployed yet. Saving logo locally for now.', 'error');
-                    return dataUrl;
-                }
-                throw error;
+                // Always fall back to local data URL — API may be unreachable or action not deployed.
+                const msg = isUnknownApiActionError(error, 'uploadCompanyLogo')
+                    ? 'uploadCompanyLogo is not deployed yet. Saving logo locally.'
+                    : 'API unavailable. Logo saved locally.';
+                window.APIClient?.showToast?.(msg, 'error');
+                return dataUrl;
             }
         }
 
@@ -5350,11 +5351,12 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 });
                 return response?.data?.direct_url || response?.data?.web_url || dataUrl;
             } catch (error) {
-                if (isUnknownApiActionError(error, 'uploadEmployeeProfilePhoto')) {
-                    window.APIClient?.showToast?.('uploadEmployeeProfilePhoto is not deployed yet. Saving photo locally for now.', 'error');
-                    return dataUrl;
-                }
-                throw error;
+                // Always fall back to local data URL — API may be unreachable or action not deployed.
+                const msg = isUnknownApiActionError(error, 'uploadEmployeeProfilePhoto')
+                    ? 'uploadEmployeeProfilePhoto is not deployed yet. Saving photo locally.'
+                    : 'API unavailable. Photo saved locally.';
+                window.APIClient?.showToast?.(msg, 'error');
+                return dataUrl;
             }
         }
 
