@@ -38,6 +38,7 @@
         let latestReportStats = null;
         const reportCharts = {};
         let supplierPurchaseHistory = {};
+        const DEFAULT_LOGO_DRIVE_FOLDER_ID = '1Lo5LEH2IUa5flRpmA11C8Y5DbU4d6u9l';
 
         const currencySymbols = { SAR: 'SR', BDT: '৳', USD: '$' };
         const exchangeRates = { SAR: 1, BDT: 27.5, USD: 0.27 };
@@ -45,6 +46,9 @@
         const ADMIN_LOGIN_USERNAME = 'amhsumon';
         const ADMIN_LOGIN_PASSWORD = '@mHs#3030';
         const AUTH_SESSION_KEY = 'pro_invoice_admin_auth';
+        const LOGIN_SECURITY_KEY = 'pro_invoice_login_security';
+        const LOGIN_MAX_ATTEMPTS = 5;
+        const LOGIN_LOCK_MS = 5 * 60 * 1000;
         const REMOVED_PRODUCT_IDS = new Set([
             '1776260800498-gb5fz1',
             '1776260800498-wd8as6',
@@ -67,6 +71,66 @@
             return sessionStorage.getItem(AUTH_SESSION_KEY) === '1';
         }
 
+        function getLoginSecurityState() {
+            try {
+                const raw = localStorage.getItem(LOGIN_SECURITY_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return {
+                    attempts: Number(parsed.attempts || 0),
+                    lockUntil: Number(parsed.lockUntil || 0)
+                };
+            } catch (error) {
+                return { attempts: 0, lockUntil: 0 };
+            }
+        }
+
+        function setLoginSecurityState(state) {
+            try {
+                localStorage.setItem(LOGIN_SECURITY_KEY, JSON.stringify({
+                    attempts: Number(state?.attempts || 0),
+                    lockUntil: Number(state?.lockUntil || 0)
+                }));
+            } catch (error) {
+                console.warn('Unable to persist login security state:', error);
+            }
+        }
+
+        function clearLoginSecurityState() {
+            setLoginSecurityState({ attempts: 0, lockUntil: 0 });
+        }
+
+        function registerFailedLoginAttempt() {
+            const now = Date.now();
+            const state = getLoginSecurityState();
+            if (state.lockUntil && state.lockUntil > now) {
+                return state;
+            }
+            const attempts = state.attempts + 1;
+            const nextState = attempts >= LOGIN_MAX_ATTEMPTS
+                ? { attempts: 0, lockUntil: now + LOGIN_LOCK_MS }
+                : { attempts, lockUntil: 0 };
+            setLoginSecurityState(nextState);
+            return nextState;
+        }
+
+        function getRemainingLockMs() {
+            const now = Date.now();
+            const state = getLoginSecurityState();
+            if (!state.lockUntil || state.lockUntil <= now) return 0;
+            return state.lockUntil - now;
+        }
+
+        function updateLoginSecurityUi() {
+            const remainingMs = getRemainingLockMs();
+            const errorEl = document.getElementById('adminLoginError');
+            const submitBtn = document.getElementById('adminLoginSubmitBtn');
+            if (submitBtn) submitBtn.disabled = remainingMs > 0;
+            if (remainingMs > 0 && errorEl) {
+                const seconds = Math.ceil(remainingMs / 1000);
+                errorEl.textContent = `Too many failed attempts. Try again in ${seconds}s.`;
+            }
+        }
+
         async function initializeAppAfterLogin() {
             if (appInitialized) return;
             loadSupplierPurchaseHistory();
@@ -86,10 +150,20 @@
             const usernameInput = document.getElementById('adminUsernameInput');
             const passwordInput = document.getElementById('adminPasswordInput');
             const errorEl = document.getElementById('adminLoginError');
+            const submitBtn = document.getElementById('adminLoginSubmitBtn');
             if (!usernameInput || !passwordInput) return;
+
+            updateLoginSecurityUi();
+            if (getRemainingLockMs() > 0) {
+                passwordInput.value = '';
+                passwordInput.focus();
+                return;
+            }
 
             const username = usernameInput.value.trim();
             const password = passwordInput.value;
+
+            if (submitBtn) submitBtn.disabled = true;
 
             let authenticated = false;
             let authenticatedName = 'Admin';
@@ -112,12 +186,24 @@
             }
 
             if (!authenticated) {
-                if (errorEl) errorEl.textContent = 'Invalid username or password.';
+                const secState = registerFailedLoginAttempt();
+                const remainingMs = getRemainingLockMs();
+                if (errorEl) {
+                    if (remainingMs > 0) {
+                        const seconds = Math.ceil(remainingMs / 1000);
+                        errorEl.textContent = `Too many failed attempts. Try again in ${seconds}s.`;
+                    } else {
+                        const left = Math.max(0, LOGIN_MAX_ATTEMPTS - Number(secState.attempts || 0));
+                        errorEl.textContent = `Invalid username or password. ${left} attempt(s) left.`;
+                    }
+                }
                 passwordInput.value = '';
                 passwordInput.focus();
+                if (submitBtn) submitBtn.disabled = getRemainingLockMs() > 0;
                 return;
             }
 
+            clearLoginSecurityState();
             sessionStorage.setItem(AUTH_SESSION_KEY, '1');
             currentUser = { name: authenticatedName, role: 'admin' };
             const sidebarName = document.getElementById('sidebarUsername');
@@ -126,6 +212,7 @@
 
             await initializeAppAfterLogin();
             setAuthGateState(true);
+            if (submitBtn) submitBtn.disabled = false;
         }
 
         function getNextSupplierNumericId() {
@@ -793,7 +880,18 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             Object.entries(settings || {}).forEach(([key, value]) => {
                 payload[key] = typeof value === 'string' ? value : JSON.stringify(value);
             });
-            await window.APIClient.postData('upsertSettings', { settings: payload });
+            try {
+                await window.APIClient.postData('upsertSettings', { settings: payload });
+            } catch (error) {
+                const message = String(error?.message || error || '');
+                const missingBulkAction = /Unknown action:\s*upsertSettings/i.test(message);
+                if (!missingBulkAction) throw error;
+
+                // Backward compatibility for older deployments: save one setting at a time.
+                for (const [key, value] of Object.entries(payload)) {
+                    await window.APIClient.postData('upsertSetting', { key, value });
+                }
+            }
         }
 
         async function syncSuppliersFromApi() {
@@ -859,6 +957,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         async function syncHRFromApi() {
+            const cachedEmployees = Array.isArray(hrEmployees) ? [...hrEmployees] : [];
+            const cachedAttendance = Array.isArray(hrAttendance) ? [...hrAttendance] : [];
+            const cachedLeaves = Array.isArray(hrLeaves) ? [...hrLeaves] : [];
+            const cachedTasks = Array.isArray(hrTasks) ? [...hrTasks] : [];
+
             const [employees, attendance, leaves, tasks] = await Promise.all([
                 window.APIClient.getData('getEmployees'),
                 window.APIClient.getData('getAttendance'),
@@ -866,47 +969,57 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 window.APIClient.getData('getTasks')
             ]);
 
-            hrEmployees = employees.map(row => ({
-                id: String(row.id || Date.now().toString()),
-                name: row.name || '',
-                role: row.role || '',
-                department: row.department || '',
-                salary: Number(row.salary || 0),
-                email: row.email || '',
-                mobile: row.mobile || '',
-                homeAddress: row.home_address || row.homeAddress || '',
-                website: row.website || '',
-                profilePhoto: row.profile_photo || row.profilePhoto || ''
-            }));
+            if (employees.length || !cachedEmployees.length) {
+                hrEmployees = employees.map(row => ({
+                    id: String(row.id || Date.now().toString()),
+                    name: row.name || '',
+                    role: row.role || '',
+                    department: row.department || '',
+                    salary: Number(row.salary || 0),
+                    email: row.email || '',
+                    mobile: row.mobile || '',
+                    homeAddress: row.home_address || row.homeAddress || '',
+                    website: row.website || '',
+                    profilePhoto: row.profile_photo || row.profilePhoto || ''
+                }));
+            }
 
-            hrAttendance = attendance.map(row => ({
-                id: String(row.id || Date.now().toString()),
-                employeeId: String(row.employee_id || row.employeeId || ''),
-                date: row.date || '',
-                status: row.status || 'Present'
-            }));
+            if (attendance.length || !cachedAttendance.length) {
+                hrAttendance = attendance.map(row => ({
+                    id: String(row.id || Date.now().toString()),
+                    employeeId: String(row.employee_id || row.employeeId || ''),
+                    date: row.date || '',
+                    status: row.status || 'Present'
+                }));
+            }
 
-            hrLeaves = leaves.map(row => ({
-                id: String(row.id || Date.now().toString()),
-                employeeId: String(row.employee_id || row.employeeId || ''),
-                type: row.type || 'Annual',
-                fromDate: row.from_date || row.fromDate || '',
-                toDate: row.to_date || row.toDate || '',
-                status: row.status || 'Pending'
-            }));
+            if (leaves.length || !cachedLeaves.length) {
+                hrLeaves = leaves.map(row => ({
+                    id: String(row.id || Date.now().toString()),
+                    employeeId: String(row.employee_id || row.employeeId || ''),
+                    type: row.type || 'Annual',
+                    fromDate: row.from_date || row.fromDate || '',
+                    toDate: row.to_date || row.toDate || '',
+                    status: row.status || 'Pending'
+                }));
+            }
 
-            hrTasks = tasks.map(row => ({
-                id: String(row.id || Date.now().toString()),
-                title: row.title || '',
-                priority: row.priority || 'Medium',
-                done: (row.status || '').toLowerCase() === 'completed'
-            }));
+            if (tasks.length || !cachedTasks.length) {
+                hrTasks = tasks.map(row => ({
+                    id: String(row.id || Date.now().toString()),
+                    title: row.title || '',
+                    priority: row.priority || 'Medium',
+                    done: (row.status || '').toLowerCase() === 'completed'
+                }));
+            }
         }
 
         // ==================== INITIALIZATION ====================
         document.addEventListener('DOMContentLoaded', async () => {
             setAuthGateState(false);
             applySidebarBranding();
+            updateLoginSecurityUi();
+            setInterval(updateLoginSecurityUi, 1000);
             const sidebarName = document.getElementById('sidebarUsername');
             if (sidebarName) sidebarName.textContent = currentUser.name;
 
@@ -5038,6 +5151,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('companyEmail').value = settings.companyEmail || '';
             document.getElementById('companyWebsite').value = settings.companyWebsite || '';
             document.getElementById('apiUrlInput').value = (window.API_URL || localStorage.getItem('gs_api_url') || '').trim();
+            document.getElementById('companyLogoDriveFolderId').value = settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             document.getElementById('companyAddress').innerHTML = settings.companyAddress || '';
             // Show logo preview if exists
             const logoPreview = document.getElementById('companyLogoPreview');
@@ -5088,13 +5202,43 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
         }
 
-        function saveSettings() {
+        function readFileAsDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = () => reject(new Error('Failed to read image file'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function uploadCompanyLogoToApi(dataUrl, folderId, fileName = 'company-logo.png') {
+            if (!isApiEnabled() || !dataUrl) return dataUrl;
+            const response = await window.APIClient.postData('uploadCompanyLogo', {
+                dataUrl,
+                folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
+                fileName
+            });
+            return response?.data?.direct_url || response?.data?.web_url || dataUrl;
+        }
+
+        async function uploadEmployeeProfilePhotoToApi(dataUrl, folderId, fileName = 'employee-photo.png') {
+            if (!isApiEnabled() || !dataUrl) return dataUrl;
+            const response = await window.APIClient.postData('uploadEmployeeProfilePhoto', {
+                dataUrl,
+                folderId: folderId || DEFAULT_LOGO_DRIVE_FOLDER_ID,
+                fileName
+            });
+            return response?.data?.direct_url || response?.data?.web_url || dataUrl;
+        }
+
+        async function saveSettings() {
             const name = document.getElementById('companyName').value;
             const vat = document.getElementById('companyVatNumber').value;
             const mobile = document.getElementById('companyMobile').value;
             const email = document.getElementById('companyEmail').value;
             const website = document.getElementById('companyWebsite').value;
             const apiUrl = document.getElementById('apiUrlInput').value.trim();
+            const logoDriveFolderId = document.getElementById('companyLogoDriveFolderId').value.trim() || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             const address = document.getElementById('companyAddress').innerHTML.trim();
             const normalizedAddress = address
                 .replace(/(<br\s*\/?>\s*){2,}/gi, '<br>')
@@ -5107,6 +5251,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             settings.companyMobile = mobile;
             settings.companyEmail = email;
             settings.companyWebsite = website;
+            settings.companyLogoDriveFolderId = logoDriveFolderId;
             settings.companyAddress = normalizedAddress;
             settings.vatTaxEnabled = vatTaxToggle ? Boolean(vatTaxToggle.checked) : true;
 
@@ -5118,27 +5263,19 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 else localStorage.removeItem('gs_api_url');
             }
 
-            if (pendingCompanyLogoData) {
-                settings.companyLogo = pendingCompanyLogoData;
-            }
-
-            // Handle logo upload
-            if (logoInput.files && logoInput.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    settings.companyLogo = e.target.result;
-                    localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
-                    saveSettingsToApi(settings).catch(error => {
-                        console.error('Failed to sync settings to API.', error);
-                    });
-                    setVatTaxEnabled(settings.vatTaxEnabled);
-                    applySidebarBranding();
-                    alert('Settings saved!');
-                    showSettings();
-                };
-                reader.readAsDataURL(logoInput.files[0]);
+            try {
+                if (pendingCompanyLogoData) {
+                    settings.companyLogo = await uploadCompanyLogoToApi(pendingCompanyLogoData, logoDriveFolderId, 'company-logo-pasted.png');
+                } else if (logoInput.files && logoInput.files[0]) {
+                    const logoDataUrl = await readFileAsDataUrl(logoInput.files[0]);
+                    settings.companyLogo = await uploadCompanyLogoToApi(logoDataUrl, logoDriveFolderId, logoInput.files[0].name || 'company-logo.png');
+                }
+            } catch (error) {
+                console.error('Failed to upload company logo.', error);
+                alert(`Logo upload failed: ${error.message || error}`);
                 return;
             }
+
             localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
             saveSettingsToApi(settings).catch(error => {
                 console.error('Failed to sync settings to API.', error);
@@ -5399,10 +5536,25 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const mobile = document.getElementById('hrEmployeeMobile')?.value.trim() || '';
             const homeAddress = document.getElementById('hrEmployeeHomeAddress')?.value.trim() || '';
             const website = document.getElementById('hrEmployeeWebsite')?.value.trim() || '';
+            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const logoDriveFolderId = String(settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID).trim() || DEFAULT_LOGO_DRIVE_FOLDER_ID;
 
             if (!name) {
                 alert('Employee name is required.');
                 return;
+            }
+
+            let profilePhoto = currentEmployeePhoto;
+            if (/^data:image\//i.test(String(profilePhoto || '')) && isApiEnabled()) {
+                try {
+                    const safeName = `${String(id || 'employee').replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}-profile-photo.png`;
+                    profilePhoto = await uploadEmployeeProfilePhotoToApi(profilePhoto, logoDriveFolderId, safeName);
+                    currentEmployeePhoto = profilePhoto;
+                } catch (error) {
+                    console.error('Employee photo upload failed:', error);
+                    alert(`Employee photo upload failed: ${error.message || error}`);
+                    return;
+                }
             }
 
             const employee = {
@@ -5415,7 +5567,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 mobile,
                 homeAddress,
                 website,
-                profilePhoto: currentEmployeePhoto
+                profilePhoto
             };
 
             if (isApiEnabled()) {
@@ -5437,8 +5589,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     });
                     await syncHRFromApi();
                 } catch (error) {
-                    console.error('Employee API save failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*(addEmployee|updateEmployee)/i.test(message)) {
+                        if (window.currentEmployeeId) {
+                            const idx = hrEmployees.findIndex(e => e.id === window.currentEmployeeId);
+                            if (idx !== -1) hrEmployees[idx] = employee;
+                        } else {
+                            hrEmployees.push(employee);
+                        }
+                        saveData();
+                        window.APIClient?.showToast?.('Employee saved locally. Redeploy Apps Script to save to Google Sheets.', 'error');
+                    } else {
+                        console.error('Employee API save failed:', error);
+                        return;
+                    }
                 }
             } else {
                 if (window.currentEmployeeId) {
@@ -5464,8 +5628,17 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     await window.APIClient.postData('deleteEmployee', { id });
                     await syncHRFromApi();
                 } catch (error) {
-                    console.error('Delete employee failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*deleteEmployee/i.test(message)) {
+                        hrEmployees = hrEmployees.filter(e => e.id !== id);
+                        hrAttendance = hrAttendance.filter(a => a.employeeId !== id);
+                        hrLeaves = hrLeaves.filter(l => l.employeeId !== id);
+                        saveData();
+                        window.APIClient?.showToast?.('Employee deleted locally. Redeploy Apps Script to sync deletes to Google Sheets.', 'error');
+                    } else {
+                        console.error('Delete employee failed:', error);
+                        return;
+                    }
                 }
             } else {
                 hrEmployees = hrEmployees.filter(e => e.id !== id);

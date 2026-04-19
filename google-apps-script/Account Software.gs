@@ -2,6 +2,7 @@
 // Single file: handles ALL actions — CRM, HR, Invoices, Products, Settings, etc.
 // Spreadsheet ID
 const SPREADSHEET_ID = '1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0';
+const DEFAULT_LOGO_DRIVE_FOLDER_ID = '1Lo5LEH2IUa5flRpmA11C8Y5DbU4d6u9l';
 
 // Sheet name aliases (for legacy compatibility)
 const SHEET_NAME_ALIASES = {
@@ -78,6 +79,14 @@ function doPost(e) {
     }
     if (action === 'addCustomerContact') {
       return jsonOut(addCustomerContactRecord(payload.contact || payload));
+    }
+
+    // ---- Assets ----
+    if (action === 'uploadCompanyLogo') {
+      return jsonOut(uploadCompanyLogo_(payload));
+    }
+    if (action === 'uploadEmployeeProfilePhoto') {
+      return jsonOut(uploadCompanyLogo_(payload));
     }
 
     // ---- Invoices ----
@@ -215,11 +224,26 @@ function doPost(e) {
     if (action === 'getSettings') {
       return jsonOut({ success: true, message: 'OK', data: getSettingsRecords() });
     }
+    if (action === 'getAllSettings') {
+      return jsonOut({ success: true, message: 'OK', data: getSettingsRecords() });
+    }
+    if (action === 'getSettingByKey') {
+      return jsonOut({ success: true, message: 'OK', data: getSettingByKey_(payload.key) });
+    }
     if (action === 'upsertSetting') {
+      return jsonOut({ success: true, message: 'OK', data: upsertSettingRecord(payload.key, payload.value) });
+    }
+    if (action === 'saveSetting') {
       return jsonOut({ success: true, message: 'OK', data: upsertSettingRecord(payload.key, payload.value) });
     }
     if (action === 'upsertSettings') {
       return jsonOut({ success: true, message: 'OK', data: upsertSettingsMap(payload.settings || {}) });
+    }
+    if (action === 'saveSettings') {
+      return jsonOut({ success: true, message: 'OK', data: upsertSettingsMap(payload.settings || {}) });
+    }
+    if (action === 'deleteSetting') {
+      return jsonOut({ success: true, message: 'OK', data: deleteSettingRecord(payload.key) });
     }
     if (action === 'setupSettingsManagementTemplate') {
       return jsonOut(setupSettingsManagementTemplate_());
@@ -757,6 +781,16 @@ function getSettingsRecords() {
   return readAll('Settings');
 }
 
+function getSettingByKey_(key) {
+  const normalizedKey = String(key || '').trim();
+  if (!normalizedKey) return null;
+  const rows = readAll('Settings');
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i].key || '').trim() === normalizedKey) return rows[i];
+  }
+  return null;
+}
+
 function upsertSettingRecord(key, value) {
   const normalizedKey = String(key || '').trim();
   if (!normalizedKey) throw new Error('Missing settings key');
@@ -780,6 +814,51 @@ function upsertSettingsMap(settings) {
     result.push(upsertSettingRecord(key, settings[key]));
   });
   return result;
+}
+
+function deleteSettingRecord(key) {
+  const normalizedKey = String(key || '').trim();
+  if (!normalizedKey) throw new Error('Missing settings key');
+  const id = `SET-${normalizedKey.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  return deleteRowById('Settings', id);
+}
+
+function uploadCompanyLogo_(payload) {
+  const folderId = String(payload.folderId || payload.folder_id || DEFAULT_LOGO_DRIVE_FOLDER_ID || '').trim();
+  const dataUrl = String(payload.dataUrl || payload.data_url || payload.base64 || '').trim();
+  const fileName = String(payload.fileName || payload.file_name || `company-logo-${Date.now()}.png`).trim();
+
+  if (!folderId) {
+    throw new Error('Missing Google Drive folder id for logo upload');
+  }
+  if (!dataUrl) {
+    throw new Error('Missing logo image data');
+  }
+
+  const parsed = parseDataUrl_(dataUrl);
+  const folder = DriveApp.getFolderById(folderId);
+  const ext = getFileExtensionFromMime_(parsed.mimeType);
+  const safeName = fileName.replace(/\.[A-Za-z0-9]+$/, '');
+  const blob = Utilities.newBlob(parsed.bytes, parsed.mimeType, `${safeName}.${ext}`);
+  const file = folder.createFile(blob);
+
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (error) {
+    // Keep file creation successful even if sharing policy blocks public access.
+  }
+
+  return {
+    success: true,
+    message: 'Company logo uploaded successfully',
+    data: {
+      file_id: file.getId(),
+      file_name: file.getName(),
+      folder_id: folderId,
+      web_url: file.getUrl(),
+      direct_url: `https://drive.google.com/uc?export=view&id=${file.getId()}`
+    }
+  };
 }
 
 function setupSettingsManagementTemplate_() {
@@ -1116,6 +1195,29 @@ function formatApiErrorMessage_(error) {
   }
 
   return cleaned || 'Unknown server error';
+}
+
+function parseDataUrl_(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error('Invalid image data format');
+  }
+  return {
+    mimeType: match[1],
+    bytes: Utilities.base64Decode(match[2])
+  };
+}
+
+function getFileExtensionFromMime_(mimeType) {
+  const map = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/svg+xml': 'svg'
+  };
+  return map[String(mimeType || '').toLowerCase()] || 'png';
 }
 
 function jsonOut(obj) {
