@@ -244,6 +244,10 @@ try {
         return isCrossOriginApiRequest() && canUseJsonpTransport(payload);
     }
 
+    function shouldUseJsonpOnly() {
+        return isGoogleAppsScriptUrl() && isCrossOriginApiRequest();
+    }
+
     function requestViaJsonp(payload) {
         const baseUrl = normalizeApiUrl(global.API_URL);
         if (!/^https:\/\/script\.google\.com\/macros\/s\//i.test(baseUrl)) {
@@ -313,6 +317,21 @@ try {
                     ? "API temporarily unavailable. Google Sheets sync is paused until the Apps Script web app responds again."
                     : "API_URL is not configured."
             );
+        }
+
+        if (shouldUseJsonpOnly()) {
+            if (!canUseJsonpTransport(payload)) {
+                markApiUnavailable();
+                throw new Error("Request payload is too large for Apps Script JSONP transport. Reduce payload size or move large uploads to a same-origin proxy/backend.");
+            }
+            try {
+                const jsonpResponse = await requestViaJsonp(payload);
+                clearApiUnavailable();
+                return jsonpResponse;
+            } catch (error) {
+                markApiUnavailable();
+                throw new Error(getFriendlyNetworkMessage(error));
+            }
         }
 
         if (shouldPreferJsonp(payload)) {
