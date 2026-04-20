@@ -1,6 +1,6 @@
 ﻿// API client for Google Apps Script backend
 // Set your deployed Apps Script Web App URL here.
-window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycbx7Y97A400SK9ZcL_lMp8N-9sVDtpahOJxULb1OjXvaoSViM--ojR_hGnGL9dbX6EYkIQ/exec";
+window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycbxFEMBndTfrFckBNmFFtKLCellF9iDSIlwjuzn2inovXJ-HBePA14wKvQvK-zPGfCPtHA/exec";
 
 try {
     const persistedApiUrl = sessionStorage.getItem("gs_api_url") || "";

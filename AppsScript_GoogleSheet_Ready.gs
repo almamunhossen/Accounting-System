@@ -20,7 +20,8 @@ const SHEET_NAME_ALIASES = {
 
 function doPost(e) {
   try {
-    const payload = JSON.parse(e.postData.contents || "{}");
+    const rawContents = (e && e.postData && typeof e.postData.contents === 'string') ? e.postData.contents : "{}";
+    const payload = JSON.parse(rawContents || "{}");
     const action = payload.action;
     ensureRequiredSheets_();
 
@@ -341,6 +342,13 @@ function doPost(e) {
   } catch (err) {
     return jsonOut({ success: false, message: formatApiErrorMessage_(err), data: [] });
   }
+}
+
+function runPingTest_() {
+  const response = doPost({ postData: { contents: JSON.stringify({ action: 'ping' }) } });
+  const text = String(response && response.getContent ? response.getContent() : '');
+  Logger.log(text || 'No response');
+  return text;
 }
 
 // ==================== HEADER SCHEMAS ====================
