@@ -60,16 +60,25 @@ try {
         return /^https?:\/\//i.test(url);
     }
 
+    function getAppsScriptDeploymentMessage(extraDetail) {
+        const detail = String(extraDetail || "").trim();
+        const suffix = detail ? ` Details: ${detail}` : "";
+        return "Apps Script web app is not responding correctly. Redeploy a new version with Execute as Me and Who has access: Anyone, and make sure the deployed project has no syntax errors or duplicate global constants." + suffix;
+    }
+
     function getFriendlyNetworkMessage(error) {
         const message = String((error && error.message) || error || "");
         if ((error && error.name) === "AbortError") {
             return "API request timed out. Please check internet and Apps Script deployment status.";
         }
+        if (/Failed to load API fallback transport|CORS fallback request timed out/i.test(message)) {
+            return getAppsScriptDeploymentMessage("The browser could not load the Apps Script JSONP fallback.");
+        }
         if (/CORS|cross-origin|Access-Control-Allow-Origin/i.test(message)) {
-            return "Browser blocked API request by CORS policy. Redeploy Apps Script Web App with Execute as Me and Who has access: Anyone, or use the built-in JSONP fallback.";
+            return "Browser blocked the direct API request. The app will try the Apps Script fallback automatically. If it still fails, the deployment is private, stale, or broken.";
         }
         if (/Failed to fetch|NetworkError|Load failed/i.test(message)) {
-            return "Failed to reach API. Check API URL, internet, and Apps Script Web App access (Execute as Me, Who has access: Anyone). If hosted on GitHub Pages, CORS fallback will be attempted automatically.";
+            return "Failed to reach the Apps Script web app. Check the API URL, internet access, and deployment settings. If hosted on GitHub Pages, fallback will be attempted automatically.";
         }
         return message || "Network request failed";
     }
@@ -202,6 +211,39 @@ try {
         return /Failed to fetch|NetworkError|Load failed|CORS|cross-origin|Access-Control-Allow-Origin/i.test(message);
     }
 
+    function getApiUrlObject() {
+        try {
+            return new URL(normalizeApiUrl(global.API_URL), global.location && global.location.href ? global.location.href : undefined);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function isGoogleAppsScriptUrl() {
+        const apiUrl = getApiUrlObject();
+        return !!(apiUrl && /^script\.google\.com$/i.test(apiUrl.hostname) && /\/macros\/s\//i.test(apiUrl.pathname));
+    }
+
+    function isCrossOriginApiRequest() {
+        const apiUrl = getApiUrlObject();
+        if (!apiUrl || !global.location || !global.location.origin) {
+            return false;
+        }
+        return apiUrl.origin !== global.location.origin;
+    }
+
+    function canUseJsonpTransport(payload) {
+        if (!isGoogleAppsScriptUrl()) {
+            return false;
+        }
+        const serializedPayload = JSON.stringify(payload || {});
+        return serializedPayload.length <= 7000;
+    }
+
+    function shouldPreferJsonp(payload) {
+        return isCrossOriginApiRequest() && canUseJsonpTransport(payload);
+    }
+
     function requestViaJsonp(payload) {
         const baseUrl = normalizeApiUrl(global.API_URL);
         if (!/^https:\/\/script\.google\.com\/macros\/s\//i.test(baseUrl)) {
@@ -268,9 +310,20 @@ try {
             const tempDown = isApiTemporarilyUnavailable();
             throw new Error(
                 tempDown
-                    ? "API temporarily unavailable. Using local cached mode."
+                    ? "API temporarily unavailable. Google Sheets sync is paused until the Apps Script web app responds again."
                     : "API_URL is not configured."
             );
+        }
+
+        if (shouldPreferJsonp(payload)) {
+            try {
+                const fallbackJson = await requestViaJsonp(payload);
+                clearApiUnavailable();
+                return fallbackJson;
+            } catch (fallbackError) {
+                markApiUnavailable();
+                throw new Error(getFriendlyNetworkMessage(fallbackError));
+            }
         }
 
         const controller = new AbortController();
@@ -318,7 +371,7 @@ try {
         } catch (error) {
             if (/<!doctype html|<html/i.test(responseText)) {
                 markApiUnavailable();
-                throw new Error("API returned HTML instead of JSON. Redeploy Apps Script Web App and set access to Anyone.");
+                throw new Error(getAppsScriptDeploymentMessage("The deployed URL returned an HTML error page instead of JSON."));
             }
             markApiUnavailable();
             throw new Error("API returned invalid JSON response.");
@@ -343,7 +396,7 @@ try {
                 // Keep UI working when a read endpoint is not deployed yet.
                 if (!warnedMissingActions.has(missingAction)) {
                     warnedMissingActions.add(missingAction);
-                    showToast(`${missingAction} is not deployed yet. Using cached/local data.`, "error");
+                    showToast(`${missingAction} is not deployed yet in the live Apps Script deployment.`, "error");
                 }
                 return [];
             }
@@ -369,11 +422,11 @@ try {
         } catch (error) {
             if (isRetriableWriteError(error)) {
                 enqueueWrite(action, data, error && error.message);
-                showToast("API offline. Change saved locally and queued for sync.", "success");
+                showToast("Apps Script is offline. Change queued and will sync when the deployment responds again.", "success");
                 return {
                     success: true,
                     queued: true,
-                    message: "Saved locally. Will sync when API is online.",
+                    message: "Change queued. Will sync when the Apps Script web app is online.",
                     data: data || {}
                 };
             }

@@ -61,6 +61,9 @@ function doPost(e) {
     if (action === 'deleteSupplier') {
       return jsonOut(deleteRowGeneric_('Suppliers', payload.supplier_id || payload.id));
     }
+    if (action === 'getSupplierById') {
+      return jsonOut({ success: true, message: 'OK', data: getSupplierById_(payload.supplier_id || payload.id) });
+    }
 
     // ---- Customer Transactions ----
     if (action === 'getCustomerTransactions') {

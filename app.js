@@ -1165,6 +1165,34 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             if (hasApiUrl) {
                 window.APIClient?.resetTemporaryUnavailable?.();
+
+                let apiHealthy = false;
+                try {
+                    const pingResponse = await window.APIClient.postDataSilent('ping', {});
+                    apiHealthy = !!(pingResponse && pingResponse.success !== false);
+                } catch (error) {
+                    apiHealthy = false;
+                }
+
+                if (!apiHealthy) {
+                    let shouldShowToast = true;
+                    try {
+                        shouldShowToast = sessionStorage.getItem(API_UNREACHABLE_TOAST_KEY) !== '1';
+                        if (shouldShowToast) {
+                            sessionStorage.setItem(API_UNREACHABLE_TOAST_KEY, '1');
+                        }
+                    } catch (error) {
+                        // Ignore sessionStorage errors and continue.
+                    }
+
+                    if (shouldShowToast) {
+                        window.APIClient?.showToast?.('Google Sheets sync is unavailable because the Apps Script web app is not responding.', 'error');
+                    }
+
+                    updateSupplierOptions();
+                    return;
+                }
+
                 const startupSyncs = [
                     { name: 'Customers', run: syncCustomersFromApi },
                     { name: 'Settings', run: syncSettingsFromApi },
@@ -1184,7 +1212,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 const failedSyncs = failedEntries.map(item => item.name);
 
                 if (failedSyncs.length) {
-                    console.error('API partially available. Failed syncs:', failedSyncs);
+                    console.warn('API partially available. Failed syncs:', failedSyncs);
                     if (window.APIClient?.showToast) {
                         const allFailed = failedSyncs.length === startupSyncs.length;
                         const failureMessages = failedEntries.map(item => String(item?.result?.reason?.message || item?.result?.reason || ''));
@@ -1203,10 +1231,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             }
 
                             if (shouldShowToast) {
-                                window.APIClient.showToast('API is currently unreachable. Using cached local data.', 'error');
+                                window.APIClient.showToast('Google Sheets sync is unavailable because the Apps Script web app is not responding.', 'error');
                             }
                         } else {
-                            window.APIClient.showToast(`API partially available (${failedSyncs.join(', ')}). Using cached data for missing modules.`, 'error');
+                            window.APIClient.showToast(`API partially available (${failedSyncs.join(', ')}). Redeploy the Apps Script web app if those modules should already exist.`, 'error');
                         }
                     }
                 }
