@@ -57,6 +57,7 @@
             '1776260800498-wd8as6',
             '1776260800499-5qdadh'
         ]);
+        const runtimeDataCache = {};
         let appInitialized = false;
 
         function filterRemovedProducts(products) {
@@ -102,29 +103,39 @@
 
         function readStoredJson(key, fallbackValue) {
             try {
-                const raw = localStorage.getItem(String(key || ''));
+                const raw = runtimeDataCache[String(key || '')];
                 if (!raw) return fallbackValue;
-                return JSON.parse(raw);
+                return typeof raw === 'string' ? JSON.parse(raw) : raw;
             } catch (error) {
                 return fallbackValue;
+            }
+        }
+
+        function writeStoredJson(key, value) {
+            const safeKey = String(key || '');
+            if (!safeKey) return;
+            try {
+                runtimeDataCache[safeKey] = JSON.stringify(value);
+            } catch (error) {
+                runtimeDataCache[safeKey] = value;
             }
         }
 
         function isAdminAuthenticated() {
             if (sessionStorage.getItem(AUTH_SESSION_KEY) === '1') return true;
             try {
-                const raw = localStorage.getItem(AUTH_PERSIST_KEY);
+                const raw = sessionStorage.getItem(AUTH_PERSIST_KEY);
                 if (!raw) return false;
                 const parsed = JSON.parse(raw);
                 const expiresAt = Number(parsed && parsed.expiresAt || 0);
                 if (!expiresAt || Date.now() > expiresAt) {
-                    localStorage.removeItem(AUTH_PERSIST_KEY);
+                    sessionStorage.removeItem(AUTH_PERSIST_KEY);
                     return false;
                 }
                 sessionStorage.setItem(AUTH_SESSION_KEY, '1');
                 return true;
             } catch (error) {
-                localStorage.removeItem(AUTH_PERSIST_KEY);
+                sessionStorage.removeItem(AUTH_PERSIST_KEY);
                 return false;
             }
         }
@@ -132,7 +143,7 @@
         function persistAdminAuth() {
             sessionStorage.setItem(AUTH_SESSION_KEY, '1');
             try {
-                localStorage.setItem(AUTH_PERSIST_KEY, JSON.stringify({
+                sessionStorage.setItem(AUTH_PERSIST_KEY, JSON.stringify({
                     expiresAt: Date.now() + AUTH_PERSIST_TTL_MS
                 }));
             } catch (error) {
@@ -143,7 +154,7 @@
         function clearAdminAuth() {
             sessionStorage.removeItem(AUTH_SESSION_KEY);
             try {
-                localStorage.removeItem(AUTH_PERSIST_KEY);
+                sessionStorage.removeItem(AUTH_PERSIST_KEY);
             } catch (error) {
                 console.warn('Unable to clear admin auth state:', error);
             }
@@ -151,7 +162,7 @@
 
         function getLoginSecurityState() {
             try {
-                const raw = localStorage.getItem(LOGIN_SECURITY_KEY);
+                const raw = sessionStorage.getItem(LOGIN_SECURITY_KEY);
                 const parsed = raw ? JSON.parse(raw) : {};
                 return {
                     attempts: Number(parsed.attempts || 0),
@@ -164,7 +175,7 @@
 
         function setLoginSecurityState(state) {
             try {
-                localStorage.setItem(LOGIN_SECURITY_KEY, JSON.stringify({
+                sessionStorage.setItem(LOGIN_SECURITY_KEY, JSON.stringify({
                     attempts: Number(state?.attempts || 0),
                     lockUntil: Number(state?.lockUntil || 0)
                 }));
@@ -531,16 +542,12 @@
         }
 
         function loadSupplierPurchaseHistory() {
-            try {
-                supplierPurchaseHistory = JSON.parse(localStorage.getItem('supplier_purchase_history') || '{}') || {};
-                normalizeAllSupplierPurchaseHistory();
-            } catch (error) {
-                supplierPurchaseHistory = {};
-            }
+            supplierPurchaseHistory = {};
+            normalizeAllSupplierPurchaseHistory();
         }
 
         function saveSupplierPurchaseHistory() {
-            localStorage.setItem('supplier_purchase_history', JSON.stringify(supplierPurchaseHistory));
+            // Supplier purchase data is synced from Google Sheets, not browser storage.
         }
 
         function getSupplierPurchaseHistory(supplierId) {
@@ -719,7 +726,7 @@
             const report = getSupplierReportStats(currentSupplierReportId);
             if (!report) return;
 
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const companyName = settings.companyName || 'Company';
             const reportWindow = window.open('', '_blank', 'width=1100,height=860');
             if (!reportWindow) return;
@@ -803,7 +810,7 @@ th { background:#eef2f7; font-size:12px; text-transform:uppercase; letter-spacin
         function printSupplierPaymentVoucher(voucher) {
             if (!voucher) return;
 
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const companyName = settings.companyName || 'Company';
             const voucherWindow = window.open('', '_blank', 'width=860,height=780');
             if (!voucherWindow) return;
@@ -961,7 +968,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     settings[key] = rawValue;
                 }
             });
-            localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+            writeStoredJson('pro_invoice_settings', settings);
         }
 
         async function saveSettingsToApi(settings) {
@@ -1142,20 +1149,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         window.addEventListener('load', applySidebarBranding);
 
         async function loadData() {
-            const data = readStoredJson('pro_invoice_data', null);
-            if (data && typeof data === 'object') {
-                customers = data.customers || [];
-                suppliers = data.suppliers || [];
-                invoices = data.invoices || [];
-                quotations = data.quotations || [];
-                expenses = data.expenses || [];
-                hrEmployees = data.hrEmployees || [];
-                hrAttendance = data.hrAttendance || [];
-                hrLeaves = data.hrLeaves || [];
-                hrTasks = data.hrTasks || [];
-                nextInvoiceNumber = data.nextInvoiceNumber || 2001;
-                nextQuotationNumber = data.nextQuotationNumber || 2001;
-            }
+            customers = [];
+            suppliers = [];
+            invoices = [];
+            quotations = [];
+            expenses = [];
+            hrEmployees = [];
+            hrAttendance = [];
+            hrLeaves = [];
+            hrTasks = [];
+            nextInvoiceNumber = 2001;
+            nextQuotationNumber = 2001;
 
             if (isApiEnabled()) {
                 const startupSyncs = [
@@ -1205,11 +1209,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 }
 
                 updateSupplierOptions();
-                saveData();
                 return;
             }
 
-            saveData();
+            window.APIClient?.showToast?.('Google Sheets API is required. No local data cache is used.', 'error');
         }
 
         function applySidebarBranding() {
@@ -1234,9 +1237,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function saveData() {
-            localStorage.setItem('pro_invoice_data', JSON.stringify({
-                customers, suppliers, invoices, quotations, expenses, hrEmployees, hrAttendance, hrLeaves, hrTasks, nextInvoiceNumber, nextQuotationNumber
-            }));
+            // Data persistence is handled by Google Sheets API only.
         }
 
         // ==================== DASHBOARD ====================
@@ -1574,7 +1575,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         const customer = customers.find(c => c.id === customerId);
                         if (!customer) return;
 
-                        const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+                        const settings = readStoredJson('pro_invoice_settings', {});
                         const companyName = settings.companyName || 'Company';
                         const openingBalance = formatCurrency(convertCurrency(Number(customer.openingBalance || 0)));
                         const closingBalance = formatCurrency(convertCurrency(Number(customer.closingBalance || 0)));
@@ -1826,7 +1827,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (!supplier) return;
             const financials = getSupplierFinancials(supplier);
 
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const companyName = settings.companyName || 'Company';
             const openingBalance = formatCurrency(convertCurrency(Number(supplier.openingBalance || 0)));
             const closingBalance = formatCurrency(convertCurrency(Number(supplier.closingBalance || 0)));
@@ -2444,12 +2445,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         let quotationItemCounter = 0;
         
         function loadSavedProducts() {
-            const stored = localStorage.getItem('savedProducts');
-            if (stored) {
-                try { savedProducts = JSON.parse(stored); } catch (err) { savedProducts = []; }
-            }
             if (!savedProducts || savedProducts.length === 0) {
-                    savedProducts = [];
+                savedProducts = [];
             }
             savedProducts = savedProducts.map(product => ({
                 id: product.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -2464,7 +2461,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 dontUpdateQty: Boolean(product.dontUpdateQty)
             }));
             savedProducts = filterRemovedProducts(savedProducts);
-            localStorage.setItem('savedProducts', JSON.stringify(savedProducts));
             updateSavedProductsDatalist();
             updateSupplierOptions();
         }
@@ -2569,15 +2565,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     return;
                 }
             } else {
-                if (currentProductId) {
-                    const index = savedProducts.findIndex(p => String(p.id) === String(currentProductId));
-                    if (index !== -1) {
-                        savedProducts[index] = productData;
-                    }
-                } else {
-                    savedProducts.push(productData);
-                }
-                localStorage.setItem('savedProducts', JSON.stringify(savedProducts));
+                alert('API is offline. Product changes are not stored locally; reconnect to save in Google Sheets.');
+                return;
             }
 
             updateSavedProductsDatalist();
@@ -2849,7 +2838,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         function updatePreview() {
             const items = getItemsFromInputs();
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const timestamp = window.currentInvoiceTimestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
             window.currentInvoiceTimestamp = timestamp;
             const customerSnapshot = getInvoiceCustomerSnapshot();
@@ -2885,7 +2874,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function generateInvoiceHTML(data) {
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const showInvoiceQr = shouldShowInvoiceQr(data);
             const qrStatusLabel = 'QR: Enabled';
             const qrStatusBg = '#ecfdf5';
@@ -3089,7 +3078,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function isVatTaxEnabled() {
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             if (typeof settings.vatTaxEnabled === 'undefined') {
                 return true;
             }
@@ -3097,9 +3086,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function setVatTaxEnabled(enabled) {
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             settings.vatTaxEnabled = Boolean(enabled);
-            localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+            writeStoredJson('pro_invoice_settings', settings);
 
             const invoiceListVisible = document.getElementById('invoiceListView')?.style.display === 'block';
             const invoiceFormVisible = document.getElementById('invoiceFormView')?.style.display === 'block';
@@ -3176,7 +3165,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function buildInvoiceQrPayload(data) {
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const timestamp = data.timestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
             const sellerName = String(data.sellerName || settings.companyName || '').trim();
@@ -3257,7 +3246,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function generateQuotationHTML(data) {
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const normalizedCompanyAddress = (settings.companyAddress || '')
                 .replace(/(<br\s*\/?>\s*){2,}/gi, '<br>')
                 .replace(/^(<br\s*\/?>\s*)+|(<br\s*\/?>\s*)+$/gi, '');
@@ -4039,7 +4028,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const customer = customers.find(c => c.name === customerName);
             if (customer && customer.email) {
                 const subject = `Quotation ${document.getElementById('quotationNoDisplay').value}`;
-                const body = `Dear ${customerName},\n\nPlease find attached our quotation.\n\nBest regards,\n${JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}').companyName || 'Company'}`;
+                const body = `Dear ${customerName},\n\nPlease find attached our quotation.\n\nBest regards,\n${readStoredJson('pro_invoice_settings', {}).companyName || 'Company'}`;
                 window.open(`mailto:${customer.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
             } else {
                 alert('Customer email not found');
@@ -4050,7 +4039,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const customerName = document.getElementById('quotationCustomerSelect').value;
             const customer = customers.find(c => c.name === customerName);
             if (customer && customer.phone) {
-                const message = `Dear ${customerName},\n\nPlease find our quotation ${document.getElementById('quotationNoDisplay').value}.\n\nBest regards,\n${JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}').companyName || 'Company'}`;
+                const message = `Dear ${customerName},\n\nPlease find our quotation ${document.getElementById('quotationNoDisplay').value}.\n\nBest regards,\n${readStoredJson('pro_invoice_settings', {}).companyName || 'Company'}`;
                 window.open(`https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`);
             } else {
                 alert('Customer phone not found');
@@ -5259,9 +5248,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('companyMobile').value = settings.companyMobile || '';
             document.getElementById('companyEmail').value = settings.companyEmail || '';
             document.getElementById('companyWebsite').value = settings.companyWebsite || '';
-            document.getElementById('apiUrlInput').value = (window.API_URL || localStorage.getItem('gs_api_url') || '').trim();
+            document.getElementById('apiUrlInput').value = (window.API_URL || sessionStorage.getItem('gs_api_url') || '').trim();
             const defaultSheetsUrl = 'https://docs.google.com/spreadsheets/d/1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0/edit';
-            document.getElementById('googleSheetsUrlInput').value = settings.googleSheetsUrl || localStorage.getItem('gs_sheets_url') || defaultSheetsUrl;
+            document.getElementById('googleSheetsUrlInput').value = settings.googleSheetsUrl || defaultSheetsUrl;
             document.getElementById('companyLogoDriveFolderId').value = settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             document.getElementById('companyAddress').innerHTML = settings.companyAddress || '';
             // Show logo preview if exists
@@ -5399,7 +5388,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 } else {
                     window.APIClient?.showToast?.('Folder detected. Folder ID saved. API is offline, so paste a file link to preview.', 'success');
                 }
-                localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+                writeStoredJson('pro_invoice_settings', settings);
                 input.value = '';
                 return;
             }
@@ -5415,7 +5404,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
             const settings = readStoredJson('pro_invoice_settings', {});
             settings.companyLogo = url;
-            localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+            writeStoredJson('pro_invoice_settings', settings);
             applySidebarBranding();
             window.APIClient?.showToast?.('Drive logo applied! Click Save Settings to persist all changes.', 'success');
             input.value = '';
@@ -5472,7 +5461,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         function openGoogleSheets() {
             const settings = readStoredJson('pro_invoice_settings', {});
             const defaultSheetsUrl = 'https://docs.google.com/spreadsheets/d/1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0/edit';
-            const url = settings.googleSheetsUrl || localStorage.getItem('gs_sheets_url') || defaultSheetsUrl;
+            const url = settings.googleSheetsUrl || defaultSheetsUrl;
             window.open(url, '_blank', 'noopener,noreferrer');
         }
 
@@ -5532,8 +5521,6 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const website = document.getElementById('companyWebsite').value;
             const apiUrl = document.getElementById('apiUrlInput').value.trim();
             const googleSheetsUrl = document.getElementById('googleSheetsUrlInput').value.trim();
-            if (googleSheetsUrl) localStorage.setItem('gs_sheets_url', googleSheetsUrl);
-            else localStorage.removeItem('gs_sheets_url');
             const logoDriveFolderId = document.getElementById('companyLogoDriveFolderId').value.trim() || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             const address = document.getElementById('companyAddress').innerHTML.trim();
             const normalizedAddress = address
@@ -5556,8 +5543,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 window.APIClient.setApiUrl(apiUrl);
             } else {
                 window.API_URL = apiUrl;
-                if (apiUrl) localStorage.setItem('gs_api_url', apiUrl);
-                else localStorage.removeItem('gs_api_url');
+                if (apiUrl) sessionStorage.setItem('gs_api_url', apiUrl);
+                else sessionStorage.removeItem('gs_api_url');
             }
 
             try {
@@ -5573,7 +5560,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return;
             }
 
-            localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
+            writeStoredJson('pro_invoice_settings', settings);
             saveSettingsToApi(settings).catch(error => {
                 console.error('Failed to sync settings to API.', error);
             });
@@ -5614,7 +5601,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
-            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+            sessionStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
         }
 
         // ==================== UTILITIES ====================
@@ -5833,7 +5820,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const mobile = document.getElementById('hrEmployeeMobile')?.value.trim() || '';
             const homeAddress = document.getElementById('hrEmployeeHomeAddress')?.value.trim() || '';
             const website = document.getElementById('hrEmployeeWebsite')?.value.trim() || '';
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const logoDriveFolderId = String(settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID).trim() || DEFAULT_LOGO_DRIVE_FOLDER_ID;
 
             if (!name) {
@@ -5949,7 +5936,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         function printHREmployee(id) {
             const emp = hrEmployees.find(e => e.id === id);
             if (!emp) return;
-            const settings = JSON.parse(localStorage.getItem('pro_invoice_settings') || '{}');
+            const settings = readStoredJson('pro_invoice_settings', {});
             const companyName = settings.companyName || '';
             const w = window.open('', '_blank', 'width=680,height=720');
             w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -6445,7 +6432,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         }
                     });
                 } else {
-                    localStorage.setItem('savedProducts', JSON.stringify(savedProducts));
+                    alert('API is offline. Product changes are not stored locally; reconnect to save in Google Sheets.');
+                    return;
                 }
                 updateSavedProductsDatalist();
                 refreshSupplierCardsIfVisible();
@@ -6500,7 +6488,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         function printProduct(id) {
             const product = savedProducts.find(p => String(p.id) === String(id));
             if (!product) return;
-            const businessName = escapeHtml(document.getElementById('businessName')?.value || localStorage.getItem('businessName') || 'Business');
+            const settings = readStoredJson('pro_invoice_settings', {});
+            const businessName = escapeHtml(document.getElementById('businessName')?.value || settings.companyName || 'Business');
             const w = window.open('', '_blank', 'width=700,height=600');
             if (!w) {
                 alert('Unable to open print window. Please allow pop-ups for this site.');
@@ -6543,8 +6532,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     await window.APIClient.postData('deleteProduct', { id: id });
                     await syncProductsFromApi();
                 } else {
-                    savedProducts = savedProducts.filter(p => p.id !== id);
-                    localStorage.setItem('savedProducts', JSON.stringify(savedProducts));
+                    alert('API is offline. Product deletions are not stored locally; reconnect to delete in Google Sheets.');
+                    return;
                 }
                 updateSavedProductsDatalist();
                 renderProducts();
@@ -6762,6 +6751,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         }
 
         // Load dark mode preference
-        if (localStorage.getItem('darkMode') === 'true') {
+        if (sessionStorage.getItem('darkMode') === 'true') {
             document.body.classList.add('dark-mode');
         }
+

@@ -1,9 +1,9 @@
-// API client for Google Apps Script backend
+﻿// API client for Google Apps Script backend
 // Set your deployed Apps Script Web App URL here.
 window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycbx7Y97A400SK9ZcL_lMp8N-9sVDtpahOJxULb1OjXvaoSViM--ojR_hGnGL9dbX6EYkIQ/exec";
 
 try {
-    const persistedApiUrl = localStorage.getItem("gs_api_url") || "";
+    const persistedApiUrl = sessionStorage.getItem("gs_api_url") || "";
     if (persistedApiUrl) {
         window.API_URL = persistedApiUrl;
     }
@@ -15,9 +15,9 @@ try {
     const warnedMissingActions = new Set();
     const API_UNAVAILABLE_UNTIL_KEY = "gs_api_unavailable_until";
     const API_UNAVAILABLE_WINDOW_MS = 5 * 60 * 1000;
-    const API_WRITE_QUEUE_KEY = "gs_api_write_queue";
     const API_WRITE_QUEUE_LIMIT = 500;
     let isFlushingQueue = false;
+    let writeQueueMemory = [];
 
     function normalizeApiUrl(url) {
         return String(url || "").trim().replace(/\s+/g, "");
@@ -88,21 +88,11 @@ try {
     }
 
     function loadWriteQueue() {
-        try {
-            const raw = localStorage.getItem(API_WRITE_QUEUE_KEY) || "[]";
-            const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (error) {
-            return [];
-        }
+        return Array.isArray(writeQueueMemory) ? writeQueueMemory.slice() : [];
     }
 
     function saveWriteQueue(queue) {
-        try {
-            localStorage.setItem(API_WRITE_QUEUE_KEY, JSON.stringify(Array.isArray(queue) ? queue : []));
-        } catch (error) {
-            // Ignore storage errors.
-        }
+        writeQueueMemory = Array.isArray(queue) ? queue.slice() : [];
     }
 
     function getWriteQueueCount() {
@@ -429,9 +419,9 @@ try {
             clearApiUnavailable();
             try {
                 if (nextUrl) {
-                    localStorage.setItem("gs_api_url", nextUrl);
+                    sessionStorage.setItem("gs_api_url", nextUrl);
                 } else {
-                    localStorage.removeItem("gs_api_url");
+                    sessionStorage.removeItem("gs_api_url");
                 }
             } catch (error) {
                 console.warn("Unable to persist API URL:", error);
@@ -445,3 +435,4 @@ try {
         }
     };
 })(window);
+
