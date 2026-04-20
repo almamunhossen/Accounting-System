@@ -5260,6 +5260,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('companyEmail').value = settings.companyEmail || '';
             document.getElementById('companyWebsite').value = settings.companyWebsite || '';
             document.getElementById('apiUrlInput').value = (window.API_URL || localStorage.getItem('gs_api_url') || '').trim();
+            const defaultSheetsUrl = 'https://docs.google.com/spreadsheets/d/1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0/edit';
+            document.getElementById('googleSheetsUrlInput').value = settings.googleSheetsUrl || localStorage.getItem('gs_sheets_url') || defaultSheetsUrl;
             document.getElementById('companyLogoDriveFolderId').value = settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             document.getElementById('companyAddress').innerHTML = settings.companyAddress || '';
             // Show logo preview if exists
@@ -5467,6 +5469,81 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
         }
 
+        function openGoogleSheets() {
+            const settings = readStoredJson('pro_invoice_settings', {});
+            const defaultSheetsUrl = 'https://docs.google.com/spreadsheets/d/1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0/edit';
+            const url = settings.googleSheetsUrl || localStorage.getItem('gs_sheets_url') || defaultSheetsUrl;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        async function testApiConnection() {
+            const resultEl = document.getElementById('apiTestResult');
+            const urlInput = document.getElementById('apiUrlInput');
+            const url = (urlInput && urlInput.value.trim()) || (window.API_URL || '').trim();
+
+            if (!url || !/^https?:\/\//i.test(url)) {
+                resultEl.style.display = 'block';
+                resultEl.style.background = '#fef2f2';
+                resultEl.style.color = '#b91c1c';
+                resultEl.style.border = '1px solid #fca5a5';
+                resultEl.innerHTML = '<i class="fas fa-times-circle"></i> No valid API URL entered. Paste your Apps Script Web App URL above.';
+                return;
+            }
+
+            resultEl.style.display = 'block';
+            resultEl.style.background = '#f1f5f9';
+            resultEl.style.color = '#475569';
+            resultEl.style.border = '1px solid #cbd5e1';
+            resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing connection...';
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'ping' }),
+                    redirect: 'follow',
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                const text = await res.text();
+                let json = null;
+                try { json = JSON.parse(text); } catch (e) { /* not JSON */ }
+
+                if (!res.ok) {
+                    resultEl.style.background = '#fef2f2';
+                    resultEl.style.color = '#b91c1c';
+                    resultEl.style.border = '1px solid #fca5a5';
+                    resultEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Server returned HTTP ${res.status}. Redeploy the Apps Script Web App.`;
+                } else if (/<!doctype html|<html/i.test(text)) {
+                    resultEl.style.background = '#fef2f2';
+                    resultEl.style.color = '#b91c1c';
+                    resultEl.style.border = '1px solid #fca5a5';
+                    resultEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> API returned an HTML page instead of JSON. Make sure: <strong>Execute as: Me</strong> and <strong>Who has access: Anyone</strong>, then redeploy as a <em>new version</em>.';
+                } else if (json) {
+                    resultEl.style.background = '#f0fdf4';
+                    resultEl.style.color = '#166534';
+                    resultEl.style.border = '1px solid #86efac';
+                    resultEl.innerHTML = '<i class="fas fa-check-circle"></i> Connection successful! API is reachable and responding.';
+                } else {
+                    resultEl.style.background = '#fffbeb';
+                    resultEl.style.color = '#92400e';
+                    resultEl.style.border = '1px solid #fcd34d';
+                    resultEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> API responded but returned unexpected data. Try redeploying as a new version.';
+                }
+            } catch (err) {
+                resultEl.style.background = '#fef2f2';
+                resultEl.style.color = '#b91c1c';
+                resultEl.style.border = '1px solid #fca5a5';
+                if (err && err.name === 'AbortError') {
+                    resultEl.innerHTML = '<i class="fas fa-clock"></i> Request timed out. Check your internet connection and that the Apps Script is deployed.';
+                } else {
+                    resultEl.innerHTML = `<i class="fas fa-times-circle"></i> Cannot reach API. Check internet connection and that the Web App is deployed with <strong>Who has access: Anyone</strong>.`;
+                }
+            }
+        }
+
         async function saveSettings() {
             const name = document.getElementById('companyName').value;
             const vat = document.getElementById('companyVatNumber').value;
@@ -5474,6 +5551,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const email = document.getElementById('companyEmail').value;
             const website = document.getElementById('companyWebsite').value;
             const apiUrl = document.getElementById('apiUrlInput').value.trim();
+            const googleSheetsUrl = document.getElementById('googleSheetsUrlInput').value.trim();
+            if (googleSheetsUrl) localStorage.setItem('gs_sheets_url', googleSheetsUrl);
+            else localStorage.removeItem('gs_sheets_url');
             const logoDriveFolderId = document.getElementById('companyLogoDriveFolderId').value.trim() || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             const address = document.getElementById('companyAddress').innerHTML.trim();
             const normalizedAddress = address
@@ -5490,6 +5570,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             settings.companyLogoDriveFolderId = logoDriveFolderId;
             settings.companyAddress = normalizedAddress;
             settings.vatTaxEnabled = vatTaxToggle ? Boolean(vatTaxToggle.checked) : true;
+            settings.googleSheetsUrl = googleSheetsUrl;
 
             if (window.APIClient?.setApiUrl) {
                 window.APIClient.setApiUrl(apiUrl);

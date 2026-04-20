@@ -24,6 +24,11 @@ function doPost(e) {
     const action = payload.action;
     ensureRequiredSheets_();
 
+    // ---- Ping / Health check ----
+    if (action === 'ping' || action === 'healthCheck' || action === 'health_check') {
+      return jsonOut({ success: true, message: 'API is online', data: { pong: true, timestamp: new Date().toISOString() } });
+    }
+
     // ---- Customers ----
     if (action === 'getCustomers') {
       return jsonOut({ success: true, message: 'OK', data: getCustomers_(payload.filters || {}) });

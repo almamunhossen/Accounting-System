@@ -74,41 +74,45 @@
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>
                 </button>
-                <button onclick="showCustomers()" class="nav-btn" id="navCustomers">
+                <button onclick="showCustomers()" class="nav-btn" id="navCustomers" name="cust-name">
                     <i class="fas fa-users"></i>
                     <span>Customers</span>
                 </button>
-                <button onclick="showSuppliers()" class="nav-btn" id="navSuppliers">
+                <button onclick="showSuppliers()" class="nav-btn" id="navSuppliers" name="sup-name">
                     <i class="fas fa-truck-loading"></i>
                     <span>Suppliers</span>
                 </button>
-                <button onclick="showHR()" class="nav-btn" id="navHR">
+                <button onclick="showHR()" class="nav-btn" id="navHR" name="hr-name">
                     <i class="fas fa-user-tie"></i>
                     <span>HR</span>
                 </button>
-                <button onclick="showProducts()" class="nav-btn" id="navProducts">
+                <button onclick="showProducts()" class="nav-btn" id="navProducts" name="ps-name">
                     <i class="fas fa-box"></i>
                     <span>Products & Services</span>
                 </button>
-                <button onclick="showInvoiceList()" class="nav-btn" id="navInvoices">
+                <button onclick="showInvoiceList()" class="nav-btn" id="navInvoices" name="inv-name">
                     <i class="fas fa-list"></i>
                     <span>Invoices</span>
                 </button>
-                <button onclick="createNewInvoice()" class="nav-btn" id="navCreate">
+                <button onclick="createNewInvoice()" class="nav-btn" id="navCreate" name="ninv-name">
                     <i class="fas fa-plus-circle"></i>
                     <span>New Invoice</span>
                 </button>
-                <button onclick="showQuotations()" class="nav-btn" id="navQuotations">
+                <button onclick="showQuotations()" class="nav-btn" id="navQuotations" name="qut-name">
                     <i class="fas fa-file-alt"></i>
                     <span>Quotations</span>
                 </button>
-                <button onclick="showReports()" class="nav-btn" id="navReports">
+                <button onclick="showReports()" class="nav-btn" id="navReports" name="rep-name">
                     <i class="fas fa-chart-bar"></i>
                     <span>Reports</span>
                 </button>
-                <button onclick="showSettings()" class="nav-btn" id="navSettings">
+                <button onclick="showSettings()" class="nav-btn" id="navSettings" name="set-name">
                     <i class="fas fa-cog"></i>
                     <span>Settings</span>
+                </button>
+                <button onclick="openGoogleSheets()" class="nav-btn" id="navGoogleSheets" name="gs-name">
+                    <i class="fab fa-google-drive" style="color:#34a853;"></i>
+                    <span>Google Sheets</span>
                 </button>
             </nav>
             <div class="user-info-sidebar">
@@ -1038,9 +1042,30 @@
                             <input type="url" id="companyWebsite" placeholder="https://www.yourwebsite.com">
                         </div>
                         <div class="form-group">
+                            <label>Google Sheets URL</label>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <input type="url" id="googleSheetsUrlInput" placeholder="https://docs.google.com/spreadsheets/d/.../edit" style="flex:1;min-width:220px;">
+                                <button type="button" onclick="openGoogleSheets()" class="btn-secondary" style="white-space:nowrap;padding:8px 14px;">
+                                    <i class="fab fa-google-drive" style="color:#34a853;"></i> Open
+                                </button>
+                            </div>
+                            <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">Link to your Google Sheets. Used by the Google Sheets sidebar button.</small>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
                             <label>Google Apps Script API URL</label>
-                            <input type="url" id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
-                            <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">Use deployed Web App URL for live Google Sheets sync.</small>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <input type="url" id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec" style="flex:1;min-width:220px;">
+                                <button type="button" onclick="testApiConnection()" class="btn-secondary" style="white-space:nowrap;padding:8px 14px;">
+                                    <i class="fas fa-plug"></i> Test API
+                                </button>
+                            </div>
+                            <div id="apiTestResult" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:13px;"></div>
+                            <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                Use deployed Web App URL for live Google Sheets sync.
+                                Deploy as: <strong>Execute as: Me</strong> &amp; <strong>Who has access: Anyone</strong>.
+                            </small>
                         </div>
                     </div>
                     <div class="form-row">
