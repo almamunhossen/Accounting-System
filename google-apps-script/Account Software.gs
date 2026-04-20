@@ -368,9 +368,33 @@ function myFunction() {
 }
 
 function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ success: true, message: 'API is online', data: [], storage: 'Google Sheets' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  const callback = sanitizeJsonpCallback_((e && e.parameter && e.parameter.callback) || '');
+  const rawPayload = String((e && e.parameter && (e.parameter.payload || e.parameter.p)) || '').trim();
+
+  if (rawPayload) {
+    let payload = {};
+    try {
+      payload = JSON.parse(rawPayload);
+    } catch (error) {
+      return outputMaybeJsonp_({ success: false, message: 'Invalid payload JSON', data: [] }, callback);
+    }
+
+    try {
+      const postResponse = doPost({ postData: { contents: JSON.stringify(payload) } });
+      const raw = String(postResponse.getContent() || '{}');
+      let responseObj;
+      try {
+        responseObj = JSON.parse(raw);
+      } catch (parseError) {
+        responseObj = { success: false, message: 'Invalid API response format', data: [] };
+      }
+      return outputMaybeJsonp_(responseObj, callback);
+    } catch (error) {
+      return outputMaybeJsonp_({ success: false, message: formatApiErrorMessage_(error), data: [] }, callback);
+    }
+  }
+
+  return outputMaybeJsonp_({ success: true, message: 'API is online', data: [], storage: 'Google Sheets' }, callback);
 }
 
 function getSpreadsheet() {
@@ -1289,4 +1313,18 @@ function jsonOut(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function outputMaybeJsonp_(obj, callback) {
+  if (!callback) return jsonOut(obj);
+  return ContentService
+    .createTextOutput(`${callback}(${JSON.stringify(obj)});`)
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
+
+function sanitizeJsonpCallback_(value) {
+  const callback = String(value || '').trim();
+  if (!callback) return '';
+  if (!/^[A-Za-z_$][0-9A-Za-z_$\.]{0,100}$/.test(callback)) return '';
+  return callback;
 }

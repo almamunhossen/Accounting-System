@@ -59,8 +59,11 @@ try {
         if ((error && error.name) === "AbortError") {
             return "API request timed out. Please check internet and Apps Script deployment status.";
         }
+        if (/CORS|cross-origin|Access-Control-Allow-Origin/i.test(message)) {
+            return "Browser blocked API request by CORS policy. Redeploy Apps Script Web App with Execute as Me and Who has access: Anyone, or use the built-in JSONP fallback.";
+        }
         if (/Failed to fetch|NetworkError|Load failed/i.test(message)) {
-            return "Failed to reach API. Check API URL, internet, and Apps Script Web App access (Execute as Me, Who has access: Anyone).";
+            return "Failed to reach API. Check API URL, internet, and Apps Script Web App access (Execute as Me, Who has access: Anyone). If hosted on GitHub Pages, CORS fallback will be attempted automatically.";
         }
         return message || "Network request failed";
     }
@@ -200,6 +203,72 @@ try {
         }, 2400);
     }
 
+    function isLikelyCorsFetchError(error) {
+        const message = String((error && error.message) || error || "");
+        return /Failed to fetch|NetworkError|Load failed|CORS|cross-origin|Access-Control-Allow-Origin/i.test(message);
+    }
+
+    function requestViaJsonp(payload) {
+        const baseUrl = normalizeApiUrl(global.API_URL);
+        if (!/^https:\/\/script\.google\.com\/macros\/s\//i.test(baseUrl)) {
+            return Promise.reject(new Error("JSONP fallback supports Google Apps Script /exec URL only."));
+        }
+
+        const serializedPayload = JSON.stringify(payload || {});
+        if (serializedPayload.length > 7000) {
+            return Promise.reject(new Error("Request payload is too large for CORS fallback transport."));
+        }
+
+        return new Promise((resolve, reject) => {
+            const callbackName = "__gs_jsonp_cb_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+            const script = document.createElement("script");
+            let settled = false;
+
+            function cleanup() {
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                try {
+                    delete global[callbackName];
+                } catch (error) {
+                    global[callbackName] = undefined;
+                }
+            }
+
+            const timeoutId = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                reject(new Error("CORS fallback request timed out."));
+            }, 20000);
+
+            global[callbackName] = function handleJsonpResponse(response) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                cleanup();
+                if (!response || response.success === false) {
+                    reject(new Error((response && response.message) || "API returned an error"));
+                    return;
+                }
+                resolve(response);
+            };
+
+            script.async = true;
+            script.onerror = function handleJsonpError() {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                cleanup();
+                reject(new Error("Failed to load API fallback transport."));
+            };
+
+            const separator = baseUrl.includes("?") ? "&" : "?";
+            script.src = `${baseUrl}${separator}payload=${encodeURIComponent(serializedPayload)}&callback=${encodeURIComponent(callbackName)}&_ts=${Date.now()}`;
+            document.head.appendChild(script);
+        });
+    }
+
     async function request(payload) {
         if (!isConfigured()) {
             const tempDown = isApiTemporarilyUnavailable();
@@ -226,6 +295,16 @@ try {
                 signal: controller.signal
             });
         } catch (error) {
+            if (isLikelyCorsFetchError(error)) {
+                try {
+                    const fallbackJson = await requestViaJsonp(payload);
+                    clearApiUnavailable();
+                    return fallbackJson;
+                } catch (fallbackError) {
+                    markApiUnavailable();
+                    throw new Error(getFriendlyNetworkMessage(fallbackError));
+                }
+            }
             markApiUnavailable();
             throw new Error(getFriendlyNetworkMessage(error));
         } finally {

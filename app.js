@@ -5497,31 +5497,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             resultEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing connection...';
 
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000);
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ action: 'ping' }),
-                    redirect: 'follow',
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                const text = await res.text();
-                let json = null;
-                try { json = JSON.parse(text); } catch (e) { /* not JSON */ }
+                if (window.APIClient?.setApiUrl) {
+                    window.APIClient.setApiUrl(url);
+                } else {
+                    window.API_URL = url;
+                }
 
-                if (!res.ok) {
-                    resultEl.style.background = '#fef2f2';
-                    resultEl.style.color = '#b91c1c';
-                    resultEl.style.border = '1px solid #fca5a5';
-                    resultEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Server returned HTTP ${res.status}. Redeploy the Apps Script Web App.`;
-                } else if (/<!doctype html|<html/i.test(text)) {
-                    resultEl.style.background = '#fef2f2';
-                    resultEl.style.color = '#b91c1c';
-                    resultEl.style.border = '1px solid #fca5a5';
-                    resultEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> API returned an HTML page instead of JSON. Make sure: <strong>Execute as: Me</strong> and <strong>Who has access: Anyone</strong>, then redeploy as a <em>new version</em>.';
-                } else if (json) {
+                const response = await window.APIClient.postDataSilent('ping', {});
+                if (response && response.success !== false) {
                     resultEl.style.background = '#f0fdf4';
                     resultEl.style.color = '#166534';
                     resultEl.style.border = '1px solid #86efac';
@@ -5536,11 +5519,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 resultEl.style.background = '#fef2f2';
                 resultEl.style.color = '#b91c1c';
                 resultEl.style.border = '1px solid #fca5a5';
-                if (err && err.name === 'AbortError') {
-                    resultEl.innerHTML = '<i class="fas fa-clock"></i> Request timed out. Check your internet connection and that the Apps Script is deployed.';
-                } else {
-                    resultEl.innerHTML = `<i class="fas fa-times-circle"></i> Cannot reach API. Check internet connection and that the Web App is deployed with <strong>Who has access: Anyone</strong>.`;
-                }
+                const message = String((err && err.message) || err || 'Unknown error');
+                resultEl.innerHTML = `<i class="fas fa-times-circle"></i> ${message}`;
             }
         }
 
