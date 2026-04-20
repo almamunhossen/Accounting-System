@@ -1161,7 +1161,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             nextInvoiceNumber = 2001;
             nextQuotationNumber = 2001;
 
-            if (isApiEnabled()) {
+            const hasApiUrl = !!(window.APIClient?.hasConfiguredUrl && window.APIClient.hasConfiguredUrl());
+
+            if (hasApiUrl) {
+                window.APIClient?.resetTemporaryUnavailable?.();
                 const startupSyncs = [
                     { name: 'Customers', run: syncCustomersFromApi },
                     { name: 'Settings', run: syncSettingsFromApi },
@@ -1212,7 +1215,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 return;
             }
 
-            window.APIClient?.showToast?.('Google Sheets API is required. No local data cache is used.', 'error');
+            window.APIClient?.showToast?.('Google Sheets API URL is missing. Open Settings and paste your deployed Apps Script Web App URL.', 'error');
         }
 
         function applySidebarBranding() {

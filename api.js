@@ -54,6 +54,12 @@ try {
         return until > Date.now();
     }
 
+    function hasConfiguredUrl() {
+        const url = normalizeApiUrl(global.API_URL);
+        global.API_URL = url;
+        return /^https?:\/\//i.test(url);
+    }
+
     function getFriendlyNetworkMessage(error) {
         const message = String((error && error.message) || error || "");
         if ((error && error.name) === "AbortError") {
@@ -69,9 +75,7 @@ try {
     }
 
     function isConfigured() {
-        const url = normalizeApiUrl(global.API_URL);
-        global.API_URL = url;
-        if (!/^https?:\/\//i.test(url)) return false;
+        if (!hasConfiguredUrl()) return false;
         if (isApiTemporarilyUnavailable()) return false;
         return true;
     }
@@ -402,6 +406,7 @@ try {
     }
 
     global.APIClient = {
+        hasConfiguredUrl,
         isConfigured,
         getData,
         postData,
@@ -413,6 +418,9 @@ try {
         showToast,
         showLoading,
         hideLoading,
+        resetTemporaryUnavailable: function resetTemporaryUnavailable() {
+            clearApiUnavailable();
+        },
         setApiUrl: function setApiUrl(url) {
             const nextUrl = normalizeApiUrl(url);
             global.API_URL = nextUrl;

@@ -1,8 +1,8 @@
 ﻿// ==================== UNIFIED ACCOUNTING SYSTEM BACKEND ====================
 // Single file: handles ALL actions — CRM, HR, Invoices, Products, Settings, etc.
 // Spreadsheet ID
-const SPREADSHEET_ID = '1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0';
-const DEFAULT_LOGO_DRIVE_FOLDER_ID = '1Lo5LEH2IUa5flRpmA11C8Y5DbU4d6u9l';
+const ACCOUNT_SOFTWARE_SPREADSHEET_ID = '1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0';
+const ACCOUNT_SOFTWARE_DEFAULT_LOGO_DRIVE_FOLDER_ID = '1Lo5LEH2IUa5flRpmA11C8Y5DbU4d6u9l';
 
 // Sheet name aliases (for legacy compatibility)
 const SHEET_NAME_ALIASES = {
@@ -398,7 +398,7 @@ function doGet(e) {
 }
 
 function getSpreadsheet() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+  return SpreadsheetApp.openById(ACCOUNT_SOFTWARE_SPREADSHEET_ID);
 }
 
 function ensureRequiredSheets_() {
@@ -856,7 +856,7 @@ function deleteSettingRecord(key) {
 }
 
 function uploadCompanyLogo_(payload) {
-  const folderId = String(payload.folderId || payload.folder_id || DEFAULT_LOGO_DRIVE_FOLDER_ID || '').trim();
+  const folderId = String(payload.folderId || payload.folder_id || ACCOUNT_SOFTWARE_DEFAULT_LOGO_DRIVE_FOLDER_ID || '').trim();
   const dataUrl = String(payload.dataUrl || payload.data_url || payload.base64 || '').trim();
   const fileName = String(payload.fileName || payload.file_name || `company-logo-${Date.now()}.png`).trim();
 
@@ -895,7 +895,7 @@ function uploadCompanyLogo_(payload) {
 
 function resolveDriveFolderLogo_(payload) {
   const rawFolder = payload.folderId || payload.folder_id || payload.folderLink || payload.folder_link || '';
-  const folderId = extractDriveFolderId_(rawFolder) || DEFAULT_LOGO_DRIVE_FOLDER_ID;
+  const folderId = extractDriveFolderId_(rawFolder) || ACCOUNT_SOFTWARE_DEFAULT_LOGO_DRIVE_FOLDER_ID;
 
   if (!folderId) {
     throw new Error('Missing Google Drive folder id');
