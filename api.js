@@ -15,6 +15,9 @@ try {
     const warnedMissingActions = new Set();
     const API_UNAVAILABLE_UNTIL_KEY = "gs_api_unavailable_until";
     const API_UNAVAILABLE_WINDOW_MS = 5 * 60 * 1000;
+    const API_WRITE_QUEUE_KEY = "gs_api_write_queue";
+    const API_WRITE_QUEUE_LIMIT = 500;
+    let isFlushingQueue = false;
 
     function normalizeApiUrl(url) {
         return String(url || "").trim().replace(/\s+/g, "");
@@ -74,6 +77,96 @@ try {
         const text = String(message || "");
         const match = text.match(/Unknown action:\s*([A-Za-z0-9_]+)/i);
         return match ? match[1] : "";
+    }
+
+    function isRetriableWriteError(error) {
+        const message = String((error && error.message) || error || "");
+        return /Failed to reach API|Network request failed|timed out|temporarily unavailable|API_URL is not configured|returned HTML instead of JSON|invalid JSON|status 429|status 5\d\d/i.test(message);
+    }
+
+    function loadWriteQueue() {
+        try {
+            const raw = localStorage.getItem(API_WRITE_QUEUE_KEY) || "[]";
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function saveWriteQueue(queue) {
+        try {
+            localStorage.setItem(API_WRITE_QUEUE_KEY, JSON.stringify(Array.isArray(queue) ? queue : []));
+        } catch (error) {
+            // Ignore storage errors.
+        }
+    }
+
+    function getWriteQueueCount() {
+        return loadWriteQueue().length;
+    }
+
+    function enqueueWrite(action, data, errorMessage) {
+        const queue = loadWriteQueue();
+        const item = {
+            id: "q-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+            action: String(action || "").trim(),
+            data: data || {},
+            created_at: new Date().toISOString(),
+            error: String(errorMessage || "")
+        };
+        queue.push(item);
+        if (queue.length > API_WRITE_QUEUE_LIMIT) {
+            queue.splice(0, queue.length - API_WRITE_QUEUE_LIMIT);
+        }
+        saveWriteQueue(queue);
+        return item;
+    }
+
+    async function flushWriteQueue(options) {
+        const opts = Object.assign({ silent: false }, options || {});
+        if (isFlushingQueue) {
+            return { synced: 0, remaining: getWriteQueueCount() };
+        }
+        if (!isConfigured()) {
+            return { synced: 0, remaining: getWriteQueueCount() };
+        }
+
+        const queue = loadWriteQueue();
+        if (!queue.length) {
+            return { synced: 0, remaining: 0 };
+        }
+
+        let synced = 0;
+        isFlushingQueue = true;
+        try {
+            while (queue.length) {
+                const item = queue[0];
+                const payload = Object.assign({ action: item.action }, item.data || {});
+                try {
+                    await request(payload);
+                    queue.shift();
+                    saveWriteQueue(queue);
+                    synced += 1;
+                } catch (error) {
+                    if (!isRetriableWriteError(error)) {
+                        // Drop permanently invalid queued writes so queue can continue.
+                        queue.shift();
+                        saveWriteQueue(queue);
+                        continue;
+                    }
+                    break;
+                }
+            }
+        } finally {
+            isFlushingQueue = false;
+        }
+
+        if (synced > 0 && !opts.silent) {
+            showToast(`Synced ${synced} offline change(s) to Google Sheets.`, "success");
+        }
+
+        return { synced: synced, remaining: queue.length };
     }
 
     function ensureUiHelpers() {
@@ -194,8 +287,23 @@ try {
         try {
             const json = await request(payload);
             showToast("Saved successfully", "success");
+            if (getWriteQueueCount() > 0) {
+                flushWriteQueue({ silent: true }).catch(() => {
+                    // Ignore background sync errors.
+                });
+            }
             return json;
         } catch (error) {
+            if (isRetriableWriteError(error)) {
+                enqueueWrite(action, data, error && error.message);
+                showToast("API offline. Change saved locally and queued for sync.", "success");
+                return {
+                    success: true,
+                    queued: true,
+                    message: "Saved locally. Will sync when API is online.",
+                    data: data || {}
+                };
+            }
             showToast(error.message || "Failed to save data", "error");
             throw error;
         } finally {
@@ -208,11 +316,31 @@ try {
         return await request(payload);
     }
 
+    if (typeof window !== "undefined" && window.addEventListener) {
+        window.addEventListener("online", function handleOnlineSync() {
+            flushWriteQueue({ silent: false }).catch(() => {
+                // Ignore background sync errors.
+            });
+        });
+
+        setInterval(() => {
+            if (getWriteQueueCount() > 0) {
+                flushWriteQueue({ silent: true }).catch(() => {
+                    // Ignore background sync errors.
+                });
+            }
+        }, 30000);
+    }
+
     global.APIClient = {
         isConfigured,
         getData,
         postData,
         postDataSilent,
+        flushQueuedWrites: function flushQueuedWrites() {
+            return flushWriteQueue({ silent: false });
+        },
+        getQueuedWritesCount: getWriteQueueCount,
         showToast,
         showLoading,
         hideLoading,
@@ -228,6 +356,11 @@ try {
                 }
             } catch (error) {
                 console.warn("Unable to persist API URL:", error);
+            }
+            if (nextUrl) {
+                flushWriteQueue({ silent: true }).catch(() => {
+                    // Ignore background sync errors.
+                });
             }
             return global.API_URL;
         }

@@ -58,14 +58,17 @@
         .logo {
             padding: 25px 20px;
             display: flex;
+            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            gap: 12px;
+            text-align: center;
+            gap: 10px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }
 
         .logo i {
             font-size: 32px;
-            color: var(--accent);
+            color: #ffffff;
         }
 
         .logo-image {
@@ -79,6 +82,29 @@
 
         .logo h3 {
             font-size: 20px;
+            color: #ffffff;
+            width: 100%;
+        }
+
+        #sidebarLogoImg {
+            width: 100%;
+            max-width: 92px;
+            height: auto;
+            max-height: 92px;
+            border: none;
+            border-radius: 10px;
+            background: transparent;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+            filter: brightness(0) invert(1);
+        }
+
+        #sidebarCompanyName {
+            color: #ffffff;
+            text-align: center;
+            font-weight: 700;
+            letter-spacing: 0.2px;
         }
 
         .nav-menu {

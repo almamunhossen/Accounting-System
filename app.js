@@ -213,6 +213,11 @@
             if (appInitialized) return;
             loadSupplierPurchaseHistory();
             await loadData();
+            if (window.APIClient?.flushQueuedWrites && window.APIClient?.getQueuedWritesCount?.() > 0) {
+                window.APIClient.flushQueuedWrites().catch(() => {
+                    // Ignore auto-sync errors during startup.
+                });
+            }
             applySidebarBranding();
             if (!isApiEnabled()) loadSavedProducts();
             setCurrentDate();
@@ -5306,6 +5311,31 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
         }
 
+        function triggerCompanyLogoPicker() {
+            const input = document.getElementById('companyLogoInput');
+            if (!input) return;
+            input.click();
+        }
+
+        async function handleCompanyLogoSelected(event) {
+            const file = event?.target?.files && event.target.files[0];
+            if (!file) return;
+            try {
+                const dataUrl = await readFileAsDataUrl(file);
+                const logoPreview = document.getElementById('companyLogoPreview');
+                if (logoPreview) {
+                    logoPreview.innerHTML = `<img src="${dataUrl}" alt="Selected Logo" style="max-width:120px;max-height:80px;">`;
+                }
+                const pasteArea = document.getElementById('companyLogoPasteArea');
+                if (pasteArea) {
+                    pasteArea.innerText = 'Logo selected successfully. Click Save Settings to apply.';
+                }
+                pendingCompanyLogoData = '';
+            } catch (error) {
+                alert(`Failed to read selected image: ${error?.message || error}`);
+            }
+        }
+
         function driveShareLinkToDirectUrl(link) {
             if (!link) return '';
             link = link.trim();
@@ -5332,7 +5362,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             return match && match[1] ? match[1] : '';
         }
 
-        function applyDriveLogoLink() {
+        async function applyDriveLogoLink() {
             const input = document.getElementById('driveLogoLinkInput');
             if (!input) return;
             const rawLink = input.value;
@@ -5346,8 +5376,28 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 }
                 const settings = readStoredJson('pro_invoice_settings', {});
                 settings.companyLogoDriveFolderId = folderId;
+                if (isApiEnabled() && window.APIClient?.postDataSilent) {
+                    try {
+                        const resolved = await window.APIClient.postDataSilent('resolveDriveFolderLogo', { folderId });
+                        const resolvedUrl = resolved?.data?.direct_url || resolved?.data?.download_url || '';
+                        if (resolvedUrl) {
+                            settings.companyLogo = resolvedUrl;
+                            const logoPreview = document.getElementById('companyLogoPreview');
+                            if (logoPreview) {
+                                logoPreview.innerHTML = `<img src="${resolvedUrl}" alt="Drive Logo" style="max-width:120px;max-height:80px;" onerror="this.style.display='none';this.nextSibling.style.display='block'"><span style="display:none;color:#b91c1c;font-size:12px;">Image failed to load. Check Drive sharing permission.</span>`;
+                            }
+                            applySidebarBranding();
+                            window.APIClient?.showToast?.('Logo loaded from Drive folder.', 'success');
+                        } else {
+                            window.APIClient?.showToast?.('Folder saved. Could not resolve image URL from API response.', 'error');
+                        }
+                    } catch (error) {
+                        window.APIClient?.showToast?.('Folder saved. API unavailable, so image was not auto-loaded.', 'error');
+                    }
+                } else {
+                    window.APIClient?.showToast?.('Folder detected. Folder ID saved. API is offline, so paste a file link to preview.', 'success');
+                }
                 localStorage.setItem('pro_invoice_settings', JSON.stringify(settings));
-                window.APIClient?.showToast?.('Folder detected. Folder ID saved. Now paste the share link of the image file inside that folder.', 'success');
                 input.value = '';
                 return;
             }

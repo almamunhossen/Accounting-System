@@ -1046,7 +1046,12 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Company Logo</label>
-                            <input type="file" id="companyLogoInput" accept="image/*">
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <input type="file" id="companyLogoInput" accept="image/*" onchange="handleCompanyLogoSelected(event)" style="flex:1;min-width:220px;">
+                                <button type="button" onclick="triggerCompanyLogoPicker()" class="btn-secondary" style="min-width:auto;padding:8px 14px;">
+                                    <i class="fas fa-image"></i> Add Logo
+                                </button>
+                            </div>
                             <input type="text" id="companyLogoDriveFolderId" placeholder="Google Drive Folder ID for logo upload" style="margin-top:10px;">
                             <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">Drive folder ID used to upload and store the company logo.</small>
                             <div

@@ -88,6 +88,9 @@ function doPost(e) {
     if (action === 'uploadEmployeeProfilePhoto') {
       return jsonOut(uploadCompanyLogo_(payload));
     }
+    if (action === 'resolveDriveFolderLogo') {
+      return jsonOut(resolveDriveFolderLogo_(payload));
+    }
 
     // ---- Invoices ----
     if (action === 'getInvoices') {
@@ -861,6 +864,51 @@ function uploadCompanyLogo_(payload) {
   };
 }
 
+function resolveDriveFolderLogo_(payload) {
+  const rawFolder = payload.folderId || payload.folder_id || payload.folderLink || payload.folder_link || '';
+  const folderId = extractDriveFolderId_(rawFolder) || DEFAULT_LOGO_DRIVE_FOLDER_ID;
+
+  if (!folderId) {
+    throw new Error('Missing Google Drive folder id');
+  }
+
+  const folder = DriveApp.getFolderById(folderId);
+  const files = folder.getFiles();
+  let selected = null;
+
+  while (files.hasNext()) {
+    const file = files.next();
+    const mime = String(file.getMimeType() || '').toLowerCase();
+    if (mime.indexOf('image/') === 0) {
+      selected = file;
+      break;
+    }
+  }
+
+  if (!selected) {
+    throw new Error('No image file found in the selected Drive folder');
+  }
+
+  try {
+    selected.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (error) {
+    // Keep resolution successful even if sharing policy blocks public access.
+  }
+
+  return {
+    success: true,
+    message: 'Drive folder logo resolved successfully',
+    data: {
+      file_id: selected.getId(),
+      file_name: selected.getName(),
+      folder_id: folderId,
+      web_url: selected.getUrl(),
+      direct_url: `https://drive.google.com/thumbnail?id=${selected.getId()}&sz=w1000`,
+      download_url: `https://drive.google.com/uc?export=view&id=${selected.getId()}`
+    }
+  };
+}
+
 function setupSettingsManagementTemplate_() {
   const sheet = getSheet('Settings');
   const headers = getHeadersForSheet('Settings');
@@ -1206,6 +1254,18 @@ function parseDataUrl_(dataUrl) {
     mimeType: match[1],
     bytes: Utilities.base64Decode(match[2])
   };
+}
+
+function extractDriveFolderId_(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+
+  let match = text.match(/\/folders\/([A-Za-z0-9_-]+)/);
+  if (!match) match = text.match(/[?&]id=([A-Za-z0-9_-]+)/);
+  if (match && match[1]) return match[1];
+
+  if (/^[A-Za-z0-9_-]{20,}$/.test(text)) return text;
+  return '';
 }
 
 function getFileExtensionFromMime_(mimeType) {
