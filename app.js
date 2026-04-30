@@ -5602,10 +5602,15 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         }
 
         // ==================== CURRENCY & DARK MODE ====================
-        function setCurrency(currency) {
+        function setCurrency(currency, button) {
             currentCurrency = currency;
             document.querySelectorAll('.currency-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            if (button && button.classList) {
+                button.classList.add('active');
+            } else {
+                const activeBtn = document.querySelector(`.currency-btn[data-currency="${currency}"]`);
+                if (activeBtn) activeBtn.classList.add('active');
+            }
             updateDashboard();
             updateCharts();
             if (document.getElementById('invoiceListView').style.display === 'block') renderInvoiceTable();

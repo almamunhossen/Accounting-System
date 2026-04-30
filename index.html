@@ -1638,9 +1638,9 @@
 
     <!-- Currency Selector -->
     <div class="currency-selector">
-        <button class="currency-btn active" onclick="setCurrency('SAR')">SR</button>
-        <button class="currency-btn" onclick="setCurrency('BDT')">BDT</button>
-        <button class="currency-btn" onclick="setCurrency('USD')">USD</button>
+        <button class="currency-btn active" data-currency="SAR" onclick="setCurrency('SAR', this)">SR</button>
+        <button class="currency-btn" data-currency="BDT" onclick="setCurrency('BDT', this)">BDT</button>
+        <button class="currency-btn" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
     </div>
 
     <!-- Dark Mode Toggle -->
