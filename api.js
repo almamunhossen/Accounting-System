@@ -1,4 +1,4 @@
-﻿// API client for Google Apps Script backend
+// API client for Google Apps Script backend
 // Set your deployed Apps Script Web App URL here.
 window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycbxFEMBndTfrFckBNmFFtKLCellF9iDSIlwjuzn2inovXJ-HBePA14wKvQvK-zPGfCPtHA/exec";
 
@@ -241,11 +241,13 @@ try {
     }
 
     function shouldPreferJsonp(payload) {
-        return isCrossOriginApiRequest() && canUseJsonpTransport(payload);
+        // Disabled prefer JSONP. Always attempt fetch POST first.
+        return false;
     }
 
     function shouldUseJsonpOnly() {
-        return isGoogleAppsScriptUrl() && isCrossOriginApiRequest();
+        // Disabled forced JSONP. Always attempt fetch POST first.
+        return false;
     }
 
     function requestViaJsonp(payload) {
