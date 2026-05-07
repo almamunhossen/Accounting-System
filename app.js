@@ -243,7 +243,9 @@
         async function initializeAppAfterLogin() {
             if (appInitialized) return;
             loadSupplierPurchaseHistory();
-            await loadData();
+
+            // Phase 1: Load from localStorage cache — renders UI instantly (no API wait)
+            loadApiCache();
             if (window.APIClient?.flushQueuedWrites && window.APIClient?.getQueuedWritesCount?.() > 0) {
                 window.APIClient.flushQueuedWrites().catch(() => {
                     // Ignore auto-sync errors during startup.
@@ -258,6 +260,9 @@
             updateDashboard();
             initCharts();
             appInitialized = true;
+
+            // Phase 2: Background sync from Google Sheets — updates UI silently when done
+            loadData().catch(err => console.warn('Background sync error:', err));
         }
 
         async function loginAdmin() {
@@ -1201,50 +1206,15 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         window.addEventListener('load', applySidebarBranding);
 
         async function loadData() {
-            customers = [];
-            suppliers = [];
-            invoices = [];
-            quotations = [];
-            expenses = [];
-            hrEmployees = [];
-            hrAttendance = [];
-            hrLeaves = [];
-            hrTasks = [];
-            nextInvoiceNumber = 2001;
-            nextQuotationNumber = 2001;
+            // Arrays are NOT cleared here — they already have data from loadApiCache().
+            // Each sync function replaces its array with fresh API data.
 
             const hasApiUrl = !!(window.APIClient?.hasConfiguredUrl && window.APIClient.hasConfiguredUrl());
 
             if (hasApiUrl) {
                 window.APIClient?.resetTemporaryUnavailable?.();
 
-                let apiHealthy = false;
-                try {
-                    const pingResponse = await window.APIClient.postDataSilent('ping', {});
-                    apiHealthy = !!(pingResponse && pingResponse.success !== false);
-                } catch (error) {
-                    apiHealthy = false;
-                }
-
-                if (!apiHealthy) {
-                    let shouldShowToast = true;
-                    try {
-                        shouldShowToast = sessionStorage.getItem(API_UNREACHABLE_TOAST_KEY) !== '1';
-                        if (shouldShowToast) {
-                            sessionStorage.setItem(API_UNREACHABLE_TOAST_KEY, '1');
-                        }
-                    } catch (error) {
-                        // Ignore sessionStorage errors and continue.
-                    }
-
-                    if (shouldShowToast) {
-                        window.APIClient?.showToast?.('Google Sheets sync is unavailable because the Apps Script web app is not responding.', 'error');
-                    }
-
-                    updateSupplierOptions();
-                    return;
-                }
-
+                // No separate ping — saves 1-3 seconds. If API is down, syncs fail and we handle below.
                 const startupSyncs = [
                     { name: 'Customers', run: syncCustomersFromApi },
                     { name: 'Settings', run: syncSettingsFromApi },
@@ -1258,6 +1228,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 ];
 
                 const results = await Promise.allSettled(startupSyncs.map(item => item.run()));
+
+                // Save fresh data to localStorage for instant next load
+                saveApiCache();
+
                 const failedEntries = results
                     .map((result, index) => ({ result, name: startupSyncs[index].name }))
                     .filter(item => item.result.status === 'rejected');
@@ -1291,6 +1265,15 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     }
                 }
 
+                // Refresh UI with latest data from background sync
+                if (appInitialized) {
+                    generateInvoiceNumber();
+                    renderCustomerSelect();
+                    if (typeof renderHREmployeeOptions === 'function') renderHREmployeeOptions();
+                    updateSavedProductsDatalist();
+                    updateDashboard();
+                    if (typeof updateCharts === 'function') updateCharts();
+                }
                 updateSupplierOptions();
                 return;
             }
@@ -1321,6 +1304,53 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         function saveData() {
             // Data persistence is handled by Google Sheets API only.
+        }
+
+        // ---- localStorage cache for instant UI on next page load ----
+        const LS_CACHE_KEY = 'pic_gs_cache_v2';
+
+        function saveApiCache() {
+            try {
+                localStorage.setItem(LS_CACHE_KEY, JSON.stringify({
+                    customers,
+                    suppliers,
+                    invoices,
+                    quotations,
+                    products: savedProducts,
+                    expenses,
+                    hrEmployees,
+                    hrAttendance,
+                    hrLeaves,
+                    hrTasks,
+                    nextInvoiceNumber,
+                    nextQuotationNumber,
+                    savedAt: Date.now()
+                }));
+            } catch (e) {
+                // localStorage quota exceeded — skip silently
+            }
+        }
+
+        function loadApiCache() {
+            try {
+                const raw = localStorage.getItem(LS_CACHE_KEY);
+                if (!raw) return;
+                const c = JSON.parse(raw);
+                if (Array.isArray(c.customers) && c.customers.length) customers = c.customers;
+                if (Array.isArray(c.suppliers) && c.suppliers.length) suppliers = c.suppliers;
+                if (Array.isArray(c.invoices) && c.invoices.length) invoices = c.invoices;
+                if (Array.isArray(c.quotations) && c.quotations.length) quotations = c.quotations;
+                if (Array.isArray(c.products) && c.products.length) savedProducts = c.products;
+                if (Array.isArray(c.expenses) && c.expenses.length) expenses = c.expenses;
+                if (Array.isArray(c.hrEmployees) && c.hrEmployees.length) hrEmployees = c.hrEmployees;
+                if (Array.isArray(c.hrAttendance) && c.hrAttendance.length) hrAttendance = c.hrAttendance;
+                if (Array.isArray(c.hrLeaves) && c.hrLeaves.length) hrLeaves = c.hrLeaves;
+                if (Array.isArray(c.hrTasks) && c.hrTasks.length) hrTasks = c.hrTasks;
+                if (Number.isFinite(c.nextInvoiceNumber) && c.nextInvoiceNumber > 2001) nextInvoiceNumber = c.nextInvoiceNumber;
+                if (Number.isFinite(c.nextQuotationNumber) && c.nextQuotationNumber > 2001) nextQuotationNumber = c.nextQuotationNumber;
+            } catch (e) {
+                // Ignore cache read errors
+            }
         }
 
         // ==================== DASHBOARD ====================
