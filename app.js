@@ -1103,12 +1103,26 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const cachedLeaves = Array.isArray(hrLeaves) ? [...hrLeaves] : [];
             const cachedTasks = Array.isArray(hrTasks) ? [...hrTasks] : [];
 
-            const [employees, attendance, leaves, tasks] = await Promise.all([
+            const [empResult, attResult, leaveResult, taskResult] = await Promise.allSettled([
                 window.APIClient.getData('getEmployees'),
                 window.APIClient.getData('getAttendance'),
                 window.APIClient.getData('getLeaves'),
                 window.APIClient.getData('getTasks')
             ]);
+
+            const employees = empResult.status === 'fulfilled' ? empResult.value : cachedEmployees.map(e => ({ id: e.id, name: e.name, role: e.role, department: e.department, salary: e.salary, email: e.email, mobile: e.mobile, home_address: e.homeAddress, website: e.website, profile_photo: e.profilePhoto }));
+            const attendance = attResult.status === 'fulfilled' ? attResult.value : cachedAttendance.map(a => ({ id: a.id, employee_id: a.employeeId, date: a.date, status: a.status }));
+            const leaves = leaveResult.status === 'fulfilled' ? leaveResult.value : cachedLeaves.map(l => ({ id: l.id, employee_id: l.employeeId, type: l.type, from_date: l.fromDate, to_date: l.toDate, status: l.status }));
+            const tasks = taskResult.status === 'fulfilled' ? taskResult.value : cachedTasks.map(t => ({ id: t.id, title: t.title, priority: t.priority, status: t.done ? 'Completed' : 'Pending' }));
+
+            if (taskResult.status === 'rejected') {
+                const msg = String(taskResult.reason?.message || '');
+                if (/Unknown action:\s*getTasks/i.test(msg)) {
+                    console.warn('getTasks is not deployed yet in the live Apps Script deployment.');
+                } else {
+                    console.warn('getTasks failed:', msg);
+                }
+            }
 
             if (employees.length || !cachedEmployees.length) {
                 hrEmployees = employees.map(row => ({
