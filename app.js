@@ -1456,7 +1456,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (isApiEnabled()) {
                 try {
                     await window.APIClient.postData('deleteCustomer', { customer_id: id });
-                    await syncCustomersFromApi();
+                    // Optimistic update: remove locally instead of re-fetching all
+                    customers = customers.filter(c => c.id !== id);
                     window.APIClient.showToast('Customer deleted successfully', 'success');
                 } catch (error) {
                     console.error('Customer API delete failed:', error);
@@ -1504,7 +1505,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 try {
                     const action = currentCustomerId ? 'updateCustomer' : 'addCustomer';
                     await window.APIClient.postData(action, { customer: normalizeCustomerToApi(customerData) });
-                    await syncCustomersFromApi();
+                    // Optimistic update: update/add locally instead of re-fetching all customers
+                    if (currentCustomerId) {
+                        const index = customers.findIndex(c => c.id === currentCustomerId);
+                        if (index !== -1) customers[index] = normalizeCustomerFromApi(normalizeCustomerToApi(customerData));
+                    } else {
+                        customers.push(normalizeCustomerFromApi(normalizeCustomerToApi(customerData)));
+                    }
                 } catch (error) {
                     console.error('Customer API save failed:', error);
                     return;
@@ -1729,14 +1736,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('suppliersView').style.display = 'block';
             setActiveNav('navSuppliers');
+            renderSuppliers(); // render immediately from local data
             if (isApiEnabled()) {
-                try {
-                    await Promise.all([syncSuppliersFromApi(), syncProductsFromApi()]);
-                } catch (error) {
-                    console.error(error);
-                }
+                // Sync in background without blocking UI
+                Promise.all([syncSuppliersFromApi(), syncProductsFromApi()])
+                    .then(() => renderSuppliers())
+                    .catch(error => console.error(error));
             }
-            renderSuppliers();
         }
 
         function renderSuppliers() {
@@ -1922,7 +1928,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (isApiEnabled()) {
                 try {
                     await window.APIClient.postData('deleteSupplier', { id: id });
-                    await syncSuppliersFromApi();
+                    // Optimistic update: remove locally instead of re-fetching all
+                    suppliers = suppliers.filter(s => s.id !== id);
                 } catch (error) {
                     console.error('Supplier API delete failed:', error);
                     return;
@@ -2092,36 +2099,40 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             if (isApiEnabled()) {
                 try {
-                    await window.APIClient.postData('addSupplierPurchase', {
-                        purchase: {
-                            id: newPurchaseId,
-                            supplier_id: currentSupplierId,
-                            product_name: productName,
-                            quantity,
-                            unit_price: unitCost,
-                            total: amount,
-                            vat_amount: 0,
-                            vat_rate: 0,
-                            paid_amount: 0,
-                            due_amount: amount,
-                            purchase_date: purchaseDate,
-                            due_date: '',
-                            status: 'Unpaid',
-                            notes: purchaseNote
-                        }
-                    });
-                    await window.APIClient.postData('addSupplierTransaction', {
-                        transaction: {
-                            id: `ST-${Date.now()}`,
-                            supplier_id: currentSupplierId,
-                            type: 'Purchase',
-                            amount,
-                            date: purchaseDate,
-                            note: `Purchase: ${invoiceNo} - ${productName}`
-                        }
-                    });
-                    await window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) });
-                    await syncSuppliersFromApi();
+                    // Run all 3 API calls in parallel for speed
+                    await Promise.all([
+                        window.APIClient.postData('addSupplierPurchase', {
+                            purchase: {
+                                id: newPurchaseId,
+                                supplier_id: currentSupplierId,
+                                product_name: productName,
+                                quantity,
+                                unit_price: unitCost,
+                                total: amount,
+                                vat_amount: 0,
+                                vat_rate: 0,
+                                paid_amount: 0,
+                                due_amount: amount,
+                                purchase_date: purchaseDate,
+                                due_date: '',
+                                status: 'Unpaid',
+                                notes: purchaseNote
+                            }
+                        }),
+                        window.APIClient.postData('addSupplierTransaction', {
+                            transaction: {
+                                id: `ST-${Date.now()}`,
+                                supplier_id: currentSupplierId,
+                                type: 'Purchase',
+                                amount,
+                                date: purchaseDate,
+                                note: `Purchase: ${invoiceNo} - ${productName}`
+                            }
+                        }),
+                        window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) })
+                    ]);
+                    // Optimistic update: update local supplier instead of re-fetching all
+                    suppliers[idx] = supplier;
                 } catch (error) {
                     console.error('Add purchase API failed:', error);
                     return;
@@ -2262,48 +2273,52 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 try {
                     const nextPaidAmount = Number(purchaseEntry.paidAmount || 0) + amount;
                     const nextDueAmount = Math.max(0, Number(purchaseEntry.dueAmount || 0) - amount);
-                    await window.APIClient.postData('addSupplierPayment', {
-                        payment: {
-                            id: paymentRecordId,
-                            supplier_id: currentSupplierId,
-                            purchase_id: currentSupplierPaymentEntryId,
-                            voucher_no: voucherNo,
-                            amount,
-                            payment_date: payDate,
-                            payment_method: 'Cash',
-                            notes: paymentNote
-                        }
-                    });
-                    await window.APIClient.postData('updateSupplierPurchase', {
-                        purchase: {
-                            id: currentSupplierPaymentEntryId,
-                            supplier_id: currentSupplierId,
-                            product_name: purchaseEntry.productName || '',
-                            quantity: purchaseEntry.quantity || 0,
-                            unit_price: purchaseEntry.unitCost || 0,
-                            total: purchaseEntry.total || 0,
-                            vat_amount: 0,
-                            vat_rate: 0,
-                            paid_amount: nextPaidAmount,
-                            due_amount: nextDueAmount,
-                            purchase_date: purchaseEntry.date || '',
-                            due_date: '',
-                            status: nextDueAmount <= 0 ? 'Paid' : 'Partial',
-                            notes: purchaseEntry.note || ''
-                        }
-                    });
-                    await window.APIClient.postData('addSupplierTransaction', {
-                        transaction: {
-                            id: `ST-${Date.now()}`,
-                            supplier_id: currentSupplierId,
-                            type: 'Payment',
-                            amount,
-                            date: payDate,
-                            note: `Payment: ${voucherNo} for invoice ${purchaseEntry.invoiceNo || ''}`
-                        }
-                    });
-                    await window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) });
-                    await syncSuppliersFromApi();
+                    // Run all 4 API calls in parallel for speed
+                    await Promise.all([
+                        window.APIClient.postData('addSupplierPayment', {
+                            payment: {
+                                id: paymentRecordId,
+                                supplier_id: currentSupplierId,
+                                purchase_id: currentSupplierPaymentEntryId,
+                                voucher_no: voucherNo,
+                                amount,
+                                payment_date: payDate,
+                                payment_method: 'Cash',
+                                notes: paymentNote
+                            }
+                        }),
+                        window.APIClient.postData('updateSupplierPurchase', {
+                            purchase: {
+                                id: currentSupplierPaymentEntryId,
+                                supplier_id: currentSupplierId,
+                                product_name: purchaseEntry.productName || '',
+                                quantity: purchaseEntry.quantity || 0,
+                                unit_price: purchaseEntry.unitCost || 0,
+                                total: purchaseEntry.total || 0,
+                                vat_amount: 0,
+                                vat_rate: 0,
+                                paid_amount: nextPaidAmount,
+                                due_amount: nextDueAmount,
+                                purchase_date: purchaseEntry.date || '',
+                                due_date: '',
+                                status: nextDueAmount <= 0 ? 'Paid' : 'Partial',
+                                notes: purchaseEntry.note || ''
+                            }
+                        }),
+                        window.APIClient.postData('addSupplierTransaction', {
+                            transaction: {
+                                id: `ST-${Date.now()}`,
+                                supplier_id: currentSupplierId,
+                                type: 'Payment',
+                                amount,
+                                date: payDate,
+                                note: `Payment: ${voucherNo} for invoice ${purchaseEntry.invoiceNo || ''}`
+                            }
+                        }),
+                        window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) })
+                    ]);
+                    // Optimistic update: update local supplier instead of re-fetching all
+                    suppliers[idx] = supplier;
                 } catch (error) {
                     console.error('Pay bill API failed:', error);
                     return;
@@ -2358,7 +2373,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     await window.APIClient.postData(currentSupplierId ? 'updateSupplier' : 'addSupplier', {
                         supplier: normalizeSupplierToApi(supplierData)
                     });
-                    await syncSuppliersFromApi();
+                    // Optimistic update: update/add locally instead of re-fetching all suppliers
+                    if (currentSupplierId) {
+                        const index = suppliers.findIndex(s => s.id === currentSupplierId);
+                        if (index !== -1) suppliers[index] = supplierData;
+                    } else {
+                        suppliers.push(supplierData);
+                    }
                 } catch (error) {
                     console.error('Supplier API save failed:', error);
                     return;
@@ -2593,7 +2614,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             dont_update_qty: String(productData.dontUpdateQty)
                         }
                     });
-                    await syncProductsFromApi();
+                    // Optimistic update: update/add locally instead of re-fetching all products
+                    if (currentProductId) {
+                        const index = savedProducts.findIndex(p => String(p.id) === String(currentProductId));
+                        if (index !== -1) savedProducts[index] = productData;
+                    } else {
+                        savedProducts.push(productData);
+                    }
                 } catch (error) {
                     console.error('Product API save failed:', error);
                     return;
@@ -3468,39 +3495,42 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         });
                     }
 
-                    await window.APIClient.postData('addInvoice', {
-                        invoice: {
-                            id: invoice.id,
-                            invoice_no: invoice.invoiceNo,
-                            customer_id: invoice.customerId,
-                            customer_name: invoice.customerName,
-                            date: invoice.date,
-                            due_date: invoice.dueDate,
-                            subtotal: invoice.subtotal,
-                            total: invoice.total,
-                            vat: invoice.vatRate,
-                            discount: invoice.discount,
-                            shipping: invoice.shipping,
-                            advance_payment: invoice.advancePayment,
-                            amount_due: invoice.amountDue,
-                            currency: invoice.currency,
-                            status: invoice.status,
-                            items: JSON.stringify(invoice.items || [])
-                        }
-                    });
+                    // Run invoice + transaction save in parallel for speed
+                    await Promise.all([
+                        window.APIClient.postData('addInvoice', {
+                            invoice: {
+                                id: invoice.id,
+                                invoice_no: invoice.invoiceNo,
+                                customer_id: invoice.customerId,
+                                customer_name: invoice.customerName,
+                                date: invoice.date,
+                                due_date: invoice.dueDate,
+                                subtotal: invoice.subtotal,
+                                total: invoice.total,
+                                vat: invoice.vatRate,
+                                discount: invoice.discount,
+                                shipping: invoice.shipping,
+                                advance_payment: invoice.advancePayment,
+                                amount_due: invoice.amountDue,
+                                currency: invoice.currency,
+                                status: invoice.status,
+                                items: JSON.stringify(invoice.items || [])
+                            }
+                        }),
+                        window.APIClient.postData('addCustomerTransaction', {
+                            transaction: {
+                                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                                customer_id: customerId,
+                                type: 'invoice',
+                                amount: Number(invoice.total || 0),
+                                date: invoice.date,
+                                note: `Invoice ${invoice.invoiceNo}`
+                            }
+                        })
+                    ]);
 
-                    await window.APIClient.postData('addCustomerTransaction', {
-                        transaction: {
-                            id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                            customer_id: customerId,
-                            type: 'invoice',
-                            amount: Number(invoice.total || 0),
-                            date: invoice.date,
-                            note: `Invoice ${invoice.invoiceNo}`
-                        }
-                    });
-
-                    await Promise.all([syncInvoicesFromApi(), syncCustomersFromApi()]);
+                    // Optimistic update: add invoice locally, refresh customer financials
+                    invoices.push(invoice);
                     await refreshCustomerFinancials(customerId);
                 } catch (error) {
                     console.error('Invoice API save failed:', error);
@@ -3546,10 +3576,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('invoiceListView').style.display = 'block';
             setActiveNav('navInvoices');
+            renderInvoiceTable(); // render immediately from local data
             if (isApiEnabled()) {
-                try { await syncInvoicesFromApi(); } catch (error) { console.error(error); }
+                // Sync in background without blocking UI
+                syncInvoicesFromApi()
+                    .then(() => renderInvoiceTable())
+                    .catch(error => console.error(error));
             }
-            renderInvoiceTable();
         }
 
         function renderInvoiceTable() {
@@ -3698,7 +3731,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (isApiEnabled()) {
                     try {
                         await window.APIClient.postData('deleteInvoice', { id: id });
-                        await syncInvoicesFromApi();
+                        // Optimistic update: remove locally instead of re-fetching all
+                        invoices = invoices.filter(i => i.id !== id);
                     } catch (error) {
                         console.error('Invoice API delete failed:', error);
                         return;
@@ -3718,37 +3752,39 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 invoice.status = 'Paid';
                 if (isApiEnabled()) {
                     try {
-                        await window.APIClient.postData('updateInvoice', {
-                            invoice: {
-                                id: invoice.id,
-                                invoice_no: invoice.invoiceNo,
-                                customer_id: invoice.customerId,
-                                customer_name: invoice.customerName,
-                                date: invoice.date,
-                                due_date: invoice.dueDate,
-                                subtotal: invoice.subtotal,
-                                total: invoice.total,
-                                vat: invoice.vatRate,
-                                discount: invoice.discount,
-                                shipping: invoice.shipping,
-                                advance_payment: invoice.advancePayment,
-                                amount_due: invoice.amountDue,
-                                currency: invoice.currency,
-                                status: invoice.status,
-                                items: JSON.stringify(invoice.items || [])
-                            }
-                        });
-                        await window.APIClient.postData('addCustomerTransaction', {
-                            transaction: {
-                                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                                customer_id: invoice.customerId,
-                                type: 'payment',
-                                amount: Number(invoice.total || 0),
-                                date: new Date().toISOString().split('T')[0],
-                                note: `Payment for invoice ${invoice.invoiceNo}`
-                            }
-                        });
-                        await syncInvoicesFromApi();
+                        await Promise.all([
+                            window.APIClient.postData('updateInvoice', {
+                                invoice: {
+                                    id: invoice.id,
+                                    invoice_no: invoice.invoiceNo,
+                                    customer_id: invoice.customerId,
+                                    customer_name: invoice.customerName,
+                                    date: invoice.date,
+                                    due_date: invoice.dueDate,
+                                    subtotal: invoice.subtotal,
+                                    total: invoice.total,
+                                    vat: invoice.vatRate,
+                                    discount: invoice.discount,
+                                    shipping: invoice.shipping,
+                                    advance_payment: invoice.advancePayment,
+                                    amount_due: invoice.amountDue,
+                                    currency: invoice.currency,
+                                    status: invoice.status,
+                                    items: JSON.stringify(invoice.items || [])
+                                }
+                            }),
+                            window.APIClient.postData('addCustomerTransaction', {
+                                transaction: {
+                                    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                                    customer_id: invoice.customerId,
+                                    type: 'payment',
+                                    amount: Number(invoice.total || 0),
+                                    date: new Date().toISOString().split('T')[0],
+                                    note: `Payment for invoice ${invoice.invoiceNo}`
+                                }
+                            })
+                        ]);
+                        // Optimistic update: invoice status already set above, refresh customer
                         await refreshCustomerFinancials(invoice.customerId);
                     } catch (error) {
                         console.error('Invoice API update failed:', error);
@@ -3768,15 +3804,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('quotationsView').style.display = 'block';
             setActiveNav('navQuotations');
-            if (isApiEnabled()) {
-                try {
-                    await syncQuotationsFromApi();
-                } catch (error) {
-                    console.error('Failed to sync quotations from API.', error);
-                }
-            }
+            renderQuotations(); // render immediately from local data
             document.getElementById('quotationSearchInput')?.focus();
-            renderQuotations();
+            if (isApiEnabled()) {
+                // Sync in background without blocking UI
+                syncQuotationsFromApi()
+                    .then(() => renderQuotations())
+                    .catch(error => console.error('Failed to sync quotations from API.', error));
+            }
         }
 
         function renderQuotations() {
@@ -4091,25 +4126,26 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         async function loadReports() {
             updateReportDataSourceStatus();
+            initializeReportFilters();
+            filterReports(); // render immediately from local data
             if (isApiEnabled()) {
-                try {
-                    await Promise.all([
-                        syncCustomersFromApi(),
-                        syncProductsFromApi(),
-                        syncInvoicesFromApi(),
-                        syncHRFromApi(),
-                        syncSupplierPurchasesFromApi(),
-                        syncExpensesFromApi()
-                    ]);
+                // Sync all report data in background, then re-render
+                Promise.all([
+                    syncCustomersFromApi(),
+                    syncProductsFromApi(),
+                    syncInvoicesFromApi(),
+                    syncHRFromApi(),
+                    syncSupplierPurchasesFromApi(),
+                    syncExpensesFromApi()
+                ]).then(() => {
                     updateReportDataSourceStatus();
-                } catch (error) {
+                    initializeReportFilters();
+                    filterReports();
+                }).catch(error => {
                     console.error('Reports API refresh failed:', error);
                     updateReportDataSourceStatus('API refresh failed, using local cache');
-                }
+                });
             }
-
-            initializeReportFilters();
-            filterReports();
         }
 
         function updateReportDataSourceStatus(overrideText = '') {
@@ -5714,30 +5750,33 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('dashboardView').style.display = 'block';
             setActiveNav('navDashboard');
-            if (isApiEnabled()) {
-                try { await Promise.all([syncCustomersFromApi(), syncInvoicesFromApi()]); } catch (error) { console.error(error); }
-            }
             updateDashboard();
             updateCharts();
+            if (isApiEnabled()) {
+                // Sync in background, then refresh
+                Promise.all([syncCustomersFromApi(), syncInvoicesFromApi()])
+                    .then(() => { updateDashboard(); updateCharts(); })
+                    .catch(error => console.error(error));
+            }
         }
 
         async function showCustomers() {
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('customersView').style.display = 'block';
             setActiveNav('navCustomers');
+            renderCustomers(); // render immediately from local data
             if (isApiEnabled()) {
-                try { await syncCustomersFromApi(); } catch (error) { console.error(error); }
+                // Sync in background without blocking UI
+                syncCustomersFromApi()
+                    .then(() => renderCustomers())
+                    .catch(error => console.error(error));
             }
-            renderCustomers();
         }
 
         async function showHR() {
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('hrView').style.display = 'block';
             setActiveNav('navHR');
-            if (isApiEnabled()) {
-                try { await syncHRFromApi(); } catch (error) { console.error(error); }
-            }
             const today = new Date().toISOString().split('T')[0];
             const attendanceDate = document.getElementById('hrAttendanceDate');
             if (attendanceDate && !attendanceDate.value) attendanceDate.value = today;
@@ -5745,7 +5784,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (leaveFrom && !leaveFrom.value) leaveFrom.value = today;
             const leaveTo = document.getElementById('hrLeaveTo');
             if (leaveTo && !leaveTo.value) leaveTo.value = today;
-            renderHRData();
+            renderHRData(); // render immediately from local data
+            if (isApiEnabled()) {
+                // Sync in background without blocking UI
+                syncHRFromApi()
+                    .then(() => renderHRData())
+                    .catch(error => console.error(error));
+            }
         }
 
         function renderHRData() {
@@ -5758,7 +5803,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         }
 
         function buildEmployeeCode() {
-            return `EMP-${Date.now().toString().slice(-6)}`;
+            const baseStart = 2000;
+            const maxUsed = hrEmployees.reduce((max, emp) => {
+                const match = String(emp?.id || '').match(/^EMP-(\d+)$/i);
+                if (!match) return max;
+                const parsed = parseInt(match[1], 10);
+                return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+            }, baseStart);
+            return `EMP-${maxUsed + 1}`;
         }
 
         function renderEmployeePhotoPreview(photoData) {
@@ -5910,7 +5962,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             profile_photo: employee.profilePhoto
                         }
                     });
-                    await syncHRFromApi();
+                    // Optimistic update
+                    if (window.currentEmployeeId) {
+                        const idx = hrEmployees.findIndex(e => e.id === window.currentEmployeeId);
+                        if (idx !== -1) hrEmployees[idx] = employee;
+                    } else {
+                        hrEmployees.push(employee);
+                    }
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*(addEmployee|updateEmployee)/i.test(message)) {
@@ -5949,7 +6007,10 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (isApiEnabled()) {
                 try {
                     await window.APIClient.postData('deleteEmployee', { id });
-                    await syncHRFromApi();
+                    // Optimistic update
+                    hrEmployees = hrEmployees.filter(e => e.id !== id);
+                    hrAttendance = hrAttendance.filter(a => a.employeeId !== id);
+                    hrLeaves = hrLeaves.filter(l => l.employeeId !== id);
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*deleteEmployee/i.test(message)) {
@@ -6139,7 +6200,10 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             status: record.status
                         }
                     });
-                    await syncHRFromApi();
+                    // Optimistic update
+                    const existingAtt = hrAttendance.find(a => a.id === record.id);
+                    if (existingAtt) { existingAtt.employeeId = record.employeeId; existingAtt.date = record.date; existingAtt.status = record.status; }
+                    else hrAttendance.push(record);
                 } catch (error) {
                     console.error('Attendance API save failed:', error);
                     return;
@@ -6166,7 +6230,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (isApiEnabled()) {
                 try {
                     await window.APIClient.postData('deleteAttendance', { id });
-                    await syncHRFromApi();
+                    // Optimistic update
+                    hrAttendance = hrAttendance.filter(item => item.id !== id);
                 } catch (error) {
                     console.error('Attendance delete failed:', error);
                     return;
@@ -6256,7 +6321,10 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             status: leave.status
                         }
                     });
-                    await syncHRFromApi();
+                    // Optimistic update
+                    const existingLeave = hrLeaves.find(l => l.id === leave.id);
+                    if (existingLeave) { Object.assign(existingLeave, leave); }
+                    else hrLeaves.push(leave);
                 } catch (error) {
                     console.error('Leave API save failed:', error);
                     return;
@@ -6285,7 +6353,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (isApiEnabled()) {
                 try {
                     await window.APIClient.postData('deleteLeave', { id });
-                    await syncHRFromApi();
+                    // Optimistic update
+                    hrLeaves = hrLeaves.filter(item => item.id !== id);
                 } catch (error) {
                     console.error('Leave delete failed:', error);
                     return;
@@ -6331,7 +6400,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             status: 'Open'
                         }
                     });
-                    await syncHRFromApi();
+                    // Optimistic update
+                    hrTasks.push(task);
                 } catch (error) {
                     console.error('Task API save failed:', error);
                     return;
@@ -6404,15 +6474,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('productsView').style.display = 'block';
             setActiveNav('navProducts');
+            renderProducts(); // render immediately from local data
             if (isApiEnabled()) {
-                try {
-                    await Promise.all([syncProductsFromApi(), syncSuppliersFromApi()]);
-                    updateSupplierOptions();
-                } catch (error) {
-                    console.error(error);
-                }
+                // Sync in background without blocking UI
+                Promise.all([syncProductsFromApi(), syncSuppliersFromApi()])
+                    .then(() => { updateSupplierOptions(); renderProducts(); })
+                    .catch(error => console.error(error));
             }
-            renderProducts();
         }
 
         function setActiveNav(navId) {
@@ -6569,7 +6637,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 const productName = savedProducts.find(p => p.id === id)?.name || 'Product';
                 if (isApiEnabled()) {
                     await window.APIClient.postData('deleteProduct', { id: id });
-                    await syncProductsFromApi();
+                    // Optimistic update: remove locally instead of re-fetching all
+                    savedProducts = savedProducts.filter(p => String(p.id) !== String(id));
                 } else {
                     alert('API is offline. Product deletions are not stored locally; reconnect to delete in Google Sheets.');
                     return;
@@ -6755,7 +6824,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         function closeQRModal() { document.getElementById('qrModal').style.display = 'none'; }
 
         function escapeHtml(str) {
-            if (!str) return '';
+            if (str === null || str === undefined) return '';
+            str = String(str);
             return str.replace(/[&<>]/g, function(m) {
                 return m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;';
             });
