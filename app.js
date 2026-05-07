@@ -1115,14 +1115,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const leaves = leaveResult.status === 'fulfilled' ? leaveResult.value : cachedLeaves.map(l => ({ id: l.id, employee_id: l.employeeId, type: l.type, from_date: l.fromDate, to_date: l.toDate, status: l.status }));
             const tasks = taskResult.status === 'fulfilled' ? taskResult.value : cachedTasks.map(t => ({ id: t.id, title: t.title, priority: t.priority, status: t.done ? 'Completed' : 'Pending' }));
 
-            if (taskResult.status === 'rejected') {
-                const msg = String(taskResult.reason?.message || '');
-                if (/Unknown action:\s*getTasks/i.test(msg)) {
-                    console.warn('getTasks is not deployed yet in the live Apps Script deployment.');
-                } else {
-                    console.warn('getTasks failed:', msg);
+            [
+                { result: empResult,   name: 'getEmployees'  },
+                { result: attResult,   name: 'getAttendance' },
+                { result: leaveResult, name: 'getLeaves'     },
+                { result: taskResult,  name: 'getTasks'      }
+            ].forEach(({ result, name }) => {
+                if (result.status === 'rejected') {
+                    console.warn(name + ' is not deployed yet in the live Apps Script deployment.');
                 }
-            }
+            });
 
             if (employees.length || !cachedEmployees.length) {
                 hrEmployees = employees.map(row => ({
