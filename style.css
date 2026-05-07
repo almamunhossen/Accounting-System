@@ -4,6 +4,50 @@
             box-sizing: border-box;
         }
 
+        /* ===== MODERN SCROLLBAR ===== */
+        ::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(74, 144, 226, 0.35);
+            border-radius: 10px;
+            transition: background 0.2s;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(74, 144, 226, 0.7);
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+
+        /* Firefox modern scrollbar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(74, 144, 226, 0.35) transparent;
+        }
+
+        body.dark-mode ::-webkit-scrollbar-thumb {
+            background: rgba(74, 144, 226, 0.25);
+        }
+
+        body.dark-mode ::-webkit-scrollbar-thumb:hover {
+            background: rgba(74, 144, 226, 0.55);
+        }
+
+        body.dark-mode * {
+            scrollbar-color: rgba(74, 144, 226, 0.25) transparent;
+        }
+        /* ===== END MODERN SCROLLBAR ===== */
+
         /* Apply transitions only to interactive/visual elements, not inputs */
         button, .btn-primary, .btn-secondary, .btn-danger, .btn-success,
         .nav-btn, .stat-card, .customer-card, .report-card, .supplier-action-btn,
