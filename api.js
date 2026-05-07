@@ -1,6 +1,6 @@
 // API client for Google Apps Script backend
 // Set your deployed Apps Script Web App URL here.
-window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycbxFEMBndTfrFckBNmFFtKLCellF9iDSIlwjuzn2inovXJ-HBePA14wKvQvK-zPGfCPtHA/exec";
+window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycby95Ut1SU6Aw-3PXnr_JH2Tz2-1CnGWP42T8JGE7qtf8pNicwfTIJxnqBZ9h8HGO1aYoA/exec";
 
 try {
     const persistedApiUrl = sessionStorage.getItem("gs_api_url") || "";
@@ -348,7 +348,7 @@ try {
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         let res;
 
         try {

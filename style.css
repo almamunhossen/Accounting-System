@@ -2,7 +2,19 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+        }
+
+        /* Apply transitions only to interactive/visual elements, not inputs */
+        button, .btn-primary, .btn-secondary, .btn-danger, .btn-success,
+        .nav-btn, .stat-card, .customer-card, .report-card, .supplier-action-btn,
+        .quotation-action-btn, .quotation-status-toggle, .modal, .modal-content,
+        .sidebar, .login-card, .login-blob {
             transition: all 0.3s ease;
+        }
+
+        /* Inputs get only a fast border/shadow transition, not full layout transitions */
+        input, select, textarea {
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
 
         :root {
