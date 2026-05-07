@@ -19,6 +19,33 @@ try {
     let isFlushingQueue = false;
     let writeQueueMemory = [];
 
+    // ---- Request deduplication: reuse in-flight GET promises ----
+    const inFlightGets = new Map();
+
+    // ---- Short-lived GET response cache (30 s TTL) ----
+    const getResponseCache = new Map();
+    const GET_CACHE_TTL_MS = 30 * 1000;
+
+    function getCacheKey(action, params) {
+        return action + ':' + JSON.stringify(params || {});
+    }
+
+    function getCachedResponse(key) {
+        const entry = getResponseCache.get(key);
+        if (!entry) return null;
+        if (Date.now() > entry.expiresAt) { getResponseCache.delete(key); return null; }
+        return entry.data;
+    }
+
+    function setCachedResponse(key, data) {
+        getResponseCache.set(key, { data, expiresAt: Date.now() + GET_CACHE_TTL_MS });
+    }
+
+    function invalidateGetCache() {
+        getResponseCache.clear();
+        inFlightGets.clear();
+    }
+
     function normalizeApiUrl(url) {
         return String(url || "").trim().replace(/\s+/g, "");
     }
@@ -282,7 +309,7 @@ try {
                 settled = true;
                 cleanup();
                 reject(new Error("CORS fallback request timed out."));
-            }, 20000);
+            }, 10000);
 
             global[callbackName] = function handleJsonpResponse(response) {
                 if (settled) return;
@@ -406,30 +433,50 @@ try {
     }
 
     async function getData(action, params) {
+        const cacheKey = getCacheKey(action, params);
+
+        // 1. Serve from short-lived cache if fresh
+        const cached = getCachedResponse(cacheKey);
+        if (cached) return cached;
+
+        // 2. Deduplicate in-flight requests for the same GET
+        if (inFlightGets.has(cacheKey)) {
+            return inFlightGets.get(cacheKey);
+        }
+
         const payload = Object.assign({ action: action }, params || {});
         showLoading();
-        try {
-            const json = await request(payload);
-            return Array.isArray(json.data) ? json.data : [];
-        } catch (error) {
-            const missingAction = getMissingActionName(error && error.message);
-            if (missingAction && /^get/i.test(String(action || ""))) {
-                // Keep UI working when a read endpoint is not deployed yet.
-                if (!warnedMissingActions.has(missingAction)) {
-                    warnedMissingActions.add(missingAction);
-                    showToast(`${missingAction} is not deployed yet in the live Apps Script deployment.`, "error");
+        const promise = request(payload)
+            .then(json => {
+                const data = Array.isArray(json.data) ? json.data : [];
+                setCachedResponse(cacheKey, data);
+                return data;
+            })
+            .catch(error => {
+                const missingAction = getMissingActionName(error && error.message);
+                if (missingAction && /^get/i.test(String(action || ""))) {
+                    if (!warnedMissingActions.has(missingAction)) {
+                        warnedMissingActions.add(missingAction);
+                        showToast(`${missingAction} is not deployed yet in the live Apps Script deployment.`, "error");
+                    }
+                    return [];
                 }
-                return [];
-            }
-            showToast(error.message || "Failed to load data", "error");
-            throw error;
-        } finally {
-            hideLoading();
-        }
+                showToast(error.message || "Failed to load data", "error");
+                throw error;
+            })
+            .finally(() => {
+                inFlightGets.delete(cacheKey);
+                hideLoading();
+            });
+
+        inFlightGets.set(cacheKey, promise);
+        return promise;
     }
 
     async function postData(action, data) {
         const payload = Object.assign({ action: action }, data || {});
+        // Invalidate GET cache on any write so next read is fresh
+        invalidateGetCache();
         showLoading();
         try {
             const json = await request(payload);
@@ -497,8 +544,14 @@ try {
         },
         setApiUrl: function setApiUrl(url) {
             const nextUrl = normalizeApiUrl(url);
+            // Security: only accept Google Apps Script /exec URLs or empty string
+            if (nextUrl && !/^https:\/\/script\.google\.com\/macros\/s//i.test(nextUrl)) {
+                console.warn('setApiUrl: rejected non-Apps-Script URL:', nextUrl);
+                return global.API_URL;
+            }
             global.API_URL = nextUrl;
             clearApiUnavailable();
+            invalidateGetCache();
             try {
                 if (nextUrl) {
                     sessionStorage.setItem("gs_api_url", nextUrl);

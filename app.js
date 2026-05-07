@@ -43,8 +43,28 @@
         const currencySymbols = { SAR: 'SR', BDT: '৳', USD: '$' };
         const exchangeRates = { SAR: 1, BDT: 27.5, USD: 0.27 };
         const saudiRiyalSymbolPath = 'image/Saudi_Riyal_Symbol.svg';
-        const ADMIN_LOGIN_USERNAME = 'amhsumon';
-        const ADMIN_LOGIN_PASSWORD = '@mHs#3030';
+        // Credentials stored as SHA-256 hashes — never keep plaintext passwords in source code.
+        const ADMIN_LOGIN_USERNAME_HASH = '9d9aa0096c64e79ed3514841f62b314afc55098f646f0f3e52e7b1668b210aa9';
+        const ADMIN_LOGIN_PASSWORD_HASH = '68471dc7380915aabc17607be83aeee9c6679ab6dd32c07c2c3188298ed7ffc3';
+
+        async function sha256(text) {
+            try {
+                const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text || '')));
+                return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (e) {
+                // Fallback for environments without SubtleCrypto (should not happen in modern browsers)
+                return null;
+            }
+        }
+
+        // Simple debounce — delays fn execution until after `wait` ms of inactivity
+        function debounce(fn, wait) {
+            let timer;
+            return function (...args) {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), wait);
+            };
+        }
         const AUTH_SESSION_KEY = 'pro_invoice_admin_auth';
         const AUTH_PERSIST_KEY = 'pro_invoice_admin_auth_persist';
         const AUTH_PERSIST_TTL_MS = 12 * 60 * 60 * 1000;
@@ -275,8 +295,17 @@
                 }
             }
 
-            if (!authenticated && username === ADMIN_LOGIN_USERNAME && password === ADMIN_LOGIN_PASSWORD) {
-                authenticated = true;
+            if (!authenticated) {
+                try {
+                    const [uHash, pHash] = await Promise.all([sha256(username), sha256(password)]);
+                    if (uHash && pHash &&
+                        uHash === ADMIN_LOGIN_USERNAME_HASH &&
+                        pHash === ADMIN_LOGIN_PASSWORD_HASH) {
+                        authenticated = true;
+                    }
+                } catch (hashErr) {
+                    console.warn('Local credential hash check failed:', hashErr);
+                }
             }
 
             if (!authenticated) {
@@ -1678,9 +1707,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             }
         }
 
-        function filterCustomers() {
+        const filterCustomers = debounce(function filterCustomers() {
             renderCustomers();
-        }
+        }, 250);
 
         function calculateCustomerFinancials(customerId) {
             const customerInvoices = invoices.filter(inv => String(inv.customerId || '') === String(customerId || ''));
@@ -1818,9 +1847,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             `;
         }
 
-        function filterSuppliers() {
+        const filterSuppliers = debounce(function filterSuppliers() {
             renderSuppliers();
-        }
+        }, 250);
 
         function showAddSupplierModal() {
             currentSupplierId = null;
@@ -3677,7 +3706,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             }, 350);
         }
 
-        function filterInvoices() {
+        const filterInvoices = debounce(function filterInvoices() {
             const term = document.getElementById('invoiceSearchInput')?.value.toLowerCase();
             if (!term) return renderInvoiceTable();
             const filtered = invoices.filter(inv =>
@@ -3694,7 +3723,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     ${filtered.map(inv => `<tr><td>${inv.invoiceNo}</td><td>${inv.customerName}</td><td>${inv.date}</td><td>${formatCurrency(convertCurrency(inv.total))}</td><td>${inv.status}</td><td style="display:flex;gap:4px;flex-wrap:wrap;"><button onclick="openInvoiceQrForInvoice('${inv.id}')" class="btn-icon" title="${qrEnabled ? 'Show QR code on invoice' : 'VAT/Tax disabled: QR will stay hidden'}" style="${qrEnabled ? 'color: var(--success);' : 'color: var(--text-secondary);'}"><i class="fas fa-qrcode"></i></button><button onclick="editInvoice('${inv.id}')" class="btn-icon" title="Edit"><i class="fas fa-edit"></i></button></td></tr>`).join('')}
                 </tbody></table>`;
             }
-        }
+        }, 250);
 
         function editInvoice(id) {
             const invoice = invoices.find(i => i.id === id);
@@ -3893,9 +3922,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             `;
         }
 
-        function filterQuotations() {
+        const filterQuotations = debounce(function filterQuotations() {
             renderQuotations();
-        }
+        }, 250);
 
         async function toggleQuotationStatus(id) {
             const quotation = quotations.find(q => q.id === id);
@@ -6508,9 +6537,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
         }
 
-        function filterProducts() {
+        const filterProducts = debounce(function filterProducts() {
             renderProducts();
-        }
+        }, 250);
 
         function addNewProductRow() {
             showAddProductModal();
