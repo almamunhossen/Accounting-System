@@ -5450,11 +5450,26 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 }
 
         // ==================== SETTINGS ====================
-        function showSettings() {
+        async function showSettings() {
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('settingsView').style.display = 'block';
             setActiveNav('navSettings');
-            const settings = readStoredJson('pro_invoice_settings', {});
+            populateSettingsForm(readStoredJson('pro_invoice_settings', {}));
+
+            // If API is enabled, fetch the latest settings from Google Sheets and re-populate
+            if (isApiEnabled()) {
+                try {
+                    await syncSettingsFromApi();
+                    populateSettingsForm(readStoredJson('pro_invoice_settings', {}));
+                    window.APIClient?.showToast?.('Settings loaded from Google Sheets.', 'success');
+                } catch (error) {
+                    console.warn('Could not load settings from API — showing cached data.', error);
+                }
+            }
+        }
+
+        // Separated into its own function so it can be called after async fetch
+        function populateSettingsForm(settings) {
             document.getElementById('companyName').value = settings.companyName || '';
             document.getElementById('companyVatNumber').value = settings.companyVatNumber || '';
             document.getElementById('companyMobile').value = settings.companyMobile || '';
@@ -5465,7 +5480,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('googleSheetsUrlInput').value = settings.googleSheetsUrl || defaultSheetsUrl;
             document.getElementById('companyLogoDriveFolderId').value = settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             document.getElementById('companyAddress').innerHTML = settings.companyAddress || '';
-            // Show logo preview if exists — fallback to localStorage
+
+            // Logo preview — fallback to localStorage
             const logoPreview = document.getElementById('companyLogoPreview');
             logoPreview.innerHTML = '';
             const savedLogoUrl = settings.companyLogo || (() => { try { return localStorage.getItem(LS_LOGO_KEY) || ''; } catch(e) { return ''; } })();
@@ -6025,17 +6041,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return;
             }
 
+            // 1. Save locally first so the UI is always up-to-date
             writeStoredJson('pro_invoice_settings', settings);
-            // Persist settings and logo to localStorage for cross-session availability
             try { localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); } catch(ex) {}
             if (settings.companyLogo) {
                 try { localStorage.setItem(LS_LOGO_KEY, settings.companyLogo); } catch(ex) {}
             }
-            saveSettingsToApi(settings).catch(error => {
-                console.error('Failed to sync settings to API.', error);
-            });
+
             setVatTaxEnabled(settings.vatTaxEnabled);
-            // Update logo preview immediately with saved URL (with local fallback on error)
             const savedLogo = settings.companyLogo;
             if (savedLogo) {
                 const previewEl = document.getElementById('companyLogoPreview');
@@ -6045,7 +6058,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 }
             }
             applySidebarBranding();
-            alert('Settings saved!');
+
+            // 2. Sync to Google Sheets — show clear success or failure toast
+            if (isApiEnabled()) {
+                try {
+                    await saveSettingsToApi(settings);
+                    window.APIClient?.showToast?.('Settings saved & synced to Google Sheets ✓', 'success');
+                } catch (error) {
+                    console.error('Failed to sync settings to Google Sheets.', error);
+                    window.APIClient?.showToast?.('Settings saved locally but failed to sync to Google Sheets. Check API URL.', 'error');
+                }
+            } else {
+                window.APIClient?.showToast?.('Settings saved locally. Connect API to sync to Google Sheets.', 'success');
+            }
+
             showSettings();
         }
 
