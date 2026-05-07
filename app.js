@@ -243,6 +243,7 @@
         async function initializeAppAfterLogin() {
             if (appInitialized) return;
             loadSupplierPurchaseHistory();
+            loadSalesmen();
 
             // Phase 1: Load from localStorage cache — renders UI instantly (no API wait)
             loadApiCache();
@@ -300,16 +301,40 @@
                 }
             }
 
+            let authenticatedRole = 'admin';
+
             if (!authenticated) {
                 try {
+                    const customCreds = getAdminCustomCreds();
+                    const expectedUHash = customCreds?.usernameHash || ADMIN_LOGIN_USERNAME_HASH;
+                    const expectedPHash = customCreds?.passwordHash || ADMIN_LOGIN_PASSWORD_HASH;
                     const [uHash, pHash] = await Promise.all([sha256(username), sha256(password)]);
                     if (uHash && pHash &&
-                        uHash === ADMIN_LOGIN_USERNAME_HASH &&
-                        pHash === ADMIN_LOGIN_PASSWORD_HASH) {
+                        uHash === expectedUHash &&
+                        pHash === expectedPHash) {
                         authenticated = true;
+                        if (customCreds?.displayName) authenticatedName = customCreds.displayName;
                     }
                 } catch (hashErr) {
                     console.warn('Local credential hash check failed:', hashErr);
+                }
+            }
+
+            // Check salesman credentials if admin check failed
+            if (!authenticated) {
+                try {
+                    loadSalesmen();
+                    const pHash = await sha256(password);
+                    const matched = salesmen.find(s =>
+                        s.username === username && s.passwordHash && s.passwordHash === pHash
+                    );
+                    if (matched) {
+                        authenticated = true;
+                        authenticatedName = matched.name;
+                        authenticatedRole = 'salesman';
+                    }
+                } catch (smErr) {
+                    console.warn('Salesman credential check failed:', smErr);
                 }
             }
 
@@ -333,7 +358,11 @@
 
             clearLoginSecurityState();
             persistAdminAuth();
-            currentUser = { name: authenticatedName, role: 'admin' };
+            currentUser = { name: authenticatedName, role: authenticatedRole };
+            try {
+                sessionStorage.setItem('pro_invoice_user_role', authenticatedRole);
+                sessionStorage.setItem('pro_invoice_user_name', authenticatedName);
+            } catch (e) {}
             const sidebarName = document.getElementById('sidebarUsername');
             if (sidebarName) sidebarName.textContent = currentUser.name;
             if (errorEl) errorEl.textContent = '';
@@ -347,6 +376,7 @@
                 }
             }
             setAuthGateState(true);
+            applyRoleUI();
             if (submitBtn) submitBtn.disabled = false;
         }
 
@@ -1077,7 +1107,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         async function syncSupplierPurchasesFromApi() {
-            const rows = await window.APIClient.getData('getSupplierPurchases');
+            let rows;
+            try {
+                rows = await window.APIClient.getData('getSupplierPurchases');
+            } catch (err) {
+                const msg = String(err?.message || err || '');
+                if (/Unknown action:\s*getSupplierPurchases/i.test(msg)) {
+                    // Action not yet deployed — skip silently and keep local data.
+                    return;
+                }
+                throw err;
+            }
             const rebuilt = {};
             rows.forEach(row => {
                 const supplierId = String(row.supplier_id || '');
@@ -1185,6 +1225,12 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (sidebarName) sidebarName.textContent = currentUser.name;
 
             if (isAdminAuthenticated()) {
+                // Restore salesman role if stored in session
+                try {
+                    const storedRole = sessionStorage.getItem('pro_invoice_user_role');
+                    const storedName = sessionStorage.getItem('pro_invoice_user_name');
+                    if (storedRole) currentUser = { name: storedName || currentUser.name, role: storedRole };
+                } catch (e) {}
                 try {
                     await initializeAppAfterLogin();
                 } catch (error) {
@@ -1194,6 +1240,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     }
                 }
                 setAuthGateState(true);
+                applyRoleUI();
                 return;
             } else {
                 setAuthGateState(false);
@@ -5436,6 +5483,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     ? true
                     : Boolean(settings.vatTaxEnabled);
             }
+
+            // Admin account section
+            const adminCustomCreds = getAdminCustomCreds();
+            const adminDisplayNameInput = document.getElementById('adminDisplayName');
+            if (adminDisplayNameInput) {
+                adminDisplayNameInput.value = adminCustomCreds?.displayName || currentUser?.name || 'Admin';
+            }
+            const adminCredsMsg = document.getElementById('adminCredsMsg');
+            if (adminCredsMsg) adminCredsMsg.textContent = '';
+            const credFields = ['adminNewUsername', 'adminCurrentPassword', 'adminNewPassword', 'adminConfirmPassword'];
+            credFields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+            // Sales team section
+            renderSalesmen();
         }
 
         function handleCompanyLogoPaste(event) {
@@ -5677,6 +5738,241 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 const message = String((err && err.message) || err || 'Unknown error');
                 resultEl.innerHTML = `<i class="fas fa-times-circle"></i> ${message}`;
             }
+        }
+
+        // ==================== ADMIN CREDENTIALS ====================
+        const ADMIN_CUSTOM_CREDS_KEY = 'pro_invoice_admin_custom_creds';
+        const SALESMEN_STORAGE_KEY = 'pro_invoice_salesmen';
+
+        function getAdminCustomCreds() {
+            try {
+                const raw = localStorage.getItem(ADMIN_CUSTOM_CREDS_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function changeAdminCredentials() {
+            const displayName = document.getElementById('adminDisplayName').value.trim();
+            const newUsername = document.getElementById('adminNewUsername').value.trim();
+            const currentPassword = document.getElementById('adminCurrentPassword').value;
+            const newPassword = document.getElementById('adminNewPassword').value;
+            const confirmPassword = document.getElementById('adminConfirmPassword').value;
+            const msgEl = document.getElementById('adminCredsMsg');
+
+            const setMsg = (text, isError) => {
+                msgEl.style.color = isError ? 'var(--danger)' : 'var(--success)';
+                msgEl.textContent = text;
+            };
+
+            if (!currentPassword) {
+                setMsg('Current password is required to save any changes.', true);
+                return;
+            }
+
+            // Verify current password against custom or default hash
+            const customCreds = getAdminCustomCreds();
+            const storedPHash = customCreds?.passwordHash || ADMIN_LOGIN_PASSWORD_HASH;
+            const currentPHash = await sha256(currentPassword);
+            if (!currentPHash || currentPHash !== storedPHash) {
+                setMsg('Current password is incorrect.', true);
+                return;
+            }
+
+            const updates = Object.assign({}, customCreds || {});
+            let changed = false;
+
+            if (displayName) {
+                updates.displayName = displayName;
+                changed = true;
+            }
+            if (newUsername) {
+                updates.usernameHash = await sha256(newUsername);
+                changed = true;
+            }
+            if (newPassword) {
+                if (newPassword.length < 8) { setMsg('New password must be at least 8 characters.', true); return; }
+                if (newPassword !== confirmPassword) { setMsg('New passwords do not match.', true); return; }
+                updates.passwordHash = await sha256(newPassword);
+                changed = true;
+            }
+
+            if (!changed) { setMsg('No changes to save.', false); return; }
+
+            try {
+                localStorage.setItem(ADMIN_CUSTOM_CREDS_KEY, JSON.stringify(updates));
+            } catch (e) {
+                setMsg('Failed to save — localStorage unavailable.', true);
+                return;
+            }
+
+            if (updates.displayName) {
+                currentUser.name = updates.displayName;
+                const sidebarUsername = document.getElementById('sidebarUsername');
+                if (sidebarUsername) sidebarUsername.textContent = updates.displayName;
+            }
+
+            document.getElementById('adminCurrentPassword').value = '';
+            document.getElementById('adminNewPassword').value = '';
+            document.getElementById('adminConfirmPassword').value = '';
+            document.getElementById('adminNewUsername').value = '';
+            setMsg('Credentials updated successfully!', false);
+        }
+
+        // ==================== SALESMEN ====================
+        let salesmen = [];
+
+        function loadSalesmen() {
+            try {
+                const raw = localStorage.getItem(SALESMEN_STORAGE_KEY);
+                salesmen = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(salesmen)) salesmen = [];
+            } catch (e) {
+                salesmen = [];
+            }
+        }
+
+        function saveSalesmenToStorage() {
+            try { localStorage.setItem(SALESMEN_STORAGE_KEY, JSON.stringify(salesmen)); } catch (e) {}
+        }
+
+        function isAdmin() {
+            return currentUser?.role === 'admin';
+        }
+
+        function applyRoleUI() {
+            const admin = isAdmin();
+            // Selector covers all add/edit/delete/save buttons that mutate data.
+            // We use a body-level class so CSS can also be leveraged.
+            if (admin) {
+                document.body.classList.remove('role-salesman');
+            } else {
+                document.body.classList.add('role-salesman');
+            }
+        }
+
+        function renderSalesmen() {
+            const container = document.getElementById('salesmanListContainer');
+            if (!container) return;
+            if (salesmen.length === 0) {
+                container.innerHTML = `<p style="color:var(--text-secondary);font-size:14px;padding:8px 0;">No salesmen added yet. Click "Add Salesman" to get started.</p>`;
+                return;
+            }
+            container.innerHTML = `
+                <div class="supplier-table-wrap">
+                    <table class="supplier-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Phone</th>
+                                <th>Email</th>
+                                <th>Commission %</th>
+                                <th>Username</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${salesmen.map(s => `
+                                <tr>
+                                    <td class="supplier-primary-text">${escapeHtml(s.name)}</td>
+                                    <td>${escapeHtml(s.phone || '-')}</td>
+                                    <td>${escapeHtml(s.email || '-')}</td>
+                                    <td>${parseFloat(s.commission || 0).toFixed(1)}%</td>
+                                    <td>${escapeHtml(s.username || '-')}</td>
+                                    <td>
+                                        <div style="display:flex;gap:6px;">
+                                            <button onclick="showSalesmanModal('${s.id}')" class="supplier-action-btn supplier-action-btn--edit">Edit</button>
+                                            <button onclick="deleteSalesman('${s.id}')" class="supplier-action-btn supplier-action-btn--delete">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        }
+
+        function showSalesmanModal(id) {
+            const modal = document.getElementById('salesmanModal');
+            if (!modal) return;
+            modal.style.display = 'flex';
+            document.getElementById('salesmanEditId').value = id || '';
+            const pwHint = document.getElementById('salesmanPasswordHint');
+            const pwLabel = document.getElementById('salesmanPasswordLabel');
+            if (id) {
+                const s = salesmen.find(x => x.id === id);
+                if (!s) return;
+                document.getElementById('salesmanModalTitle').textContent = 'Edit Salesman';
+                document.getElementById('salesmanName').value = s.name || '';
+                document.getElementById('salesmanPhone').value = s.phone || '';
+                document.getElementById('salesmanEmail').value = s.email || '';
+                document.getElementById('salesmanCommission').value = s.commission || 0;
+                document.getElementById('salesmanUsername').value = s.username || '';
+                document.getElementById('salesmanPassword').value = '';
+                if (pwHint) pwHint.style.display = 'block';
+                if (pwLabel) pwLabel.innerHTML = 'Password';
+            } else {
+                document.getElementById('salesmanModalTitle').textContent = 'Add Salesman';
+                document.getElementById('salesmanName').value = '';
+                document.getElementById('salesmanPhone').value = '';
+                document.getElementById('salesmanEmail').value = '';
+                document.getElementById('salesmanCommission').value = 0;
+                document.getElementById('salesmanUsername').value = '';
+                document.getElementById('salesmanPassword').value = '';
+                if (pwHint) pwHint.style.display = 'none';
+                if (pwLabel) pwLabel.innerHTML = 'Password <span style="color:var(--danger);">*</span>';
+            }
+            document.getElementById('salesmanName').focus();
+        }
+
+        function closeSalesmanModal() {
+            const modal = document.getElementById('salesmanModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function saveSalesman() {
+            const name = document.getElementById('salesmanName').value.trim();
+            if (!name) { alert('Salesman name is required.'); return; }
+            const phone = document.getElementById('salesmanPhone').value.trim();
+            const email = document.getElementById('salesmanEmail').value.trim();
+            const commission = parseFloat(document.getElementById('salesmanCommission').value) || 0;
+            const username = document.getElementById('salesmanUsername').value.trim();
+            const password = document.getElementById('salesmanPassword').value;
+            const editId = document.getElementById('salesmanEditId').value;
+
+            if (!username) { alert('Username is required for login.'); return; }
+
+            // Check username uniqueness (excluding the salesman being edited)
+            const duplicate = salesmen.find(s => s.username === username && s.id !== editId);
+            if (duplicate) { alert('That username is already taken by another salesman.'); return; }
+
+            if (editId) {
+                const idx = salesmen.findIndex(s => s.id === editId);
+                if (idx === -1) return;
+                const existing = salesmen[idx];
+                let passwordHash = existing.passwordHash || '';
+                if (password) {
+                    if (password.length < 6) { alert('Password must be at least 6 characters.'); return; }
+                    passwordHash = await sha256(password);
+                }
+                salesmen[idx] = { ...existing, name, phone, email, commission, username, passwordHash };
+            } else {
+                if (!password) { alert('Password is required.'); return; }
+                if (password.length < 6) { alert('Password must be at least 6 characters.'); return; }
+                const passwordHash = await sha256(password);
+                salesmen.push({ id: `sm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, phone, email, commission, username, passwordHash });
+            }
+            saveSalesmenToStorage();
+            renderSalesmen();
+            closeSalesmanModal();
+        }
+
+        function deleteSalesman(id) {
+            if (!confirm('Delete this salesman? This cannot be undone.')) return;
+            salesmen = salesmen.filter(s => s.id !== id);
+            saveSalesmenToStorage();
+            renderSalesmen();
         }
 
         async function saveSettings() {
@@ -6608,6 +6904,24 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (activeBtn) activeBtn.classList.add('active');
         }
 
+        function toggleMobileSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (!sidebar || !overlay) return;
+            const isOpen = sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('visible', isOpen);
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+        }
+
+        function closeMobileSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (!sidebar || !overlay) return;
+            sidebar.classList.remove('mobile-open');
+            overlay.classList.remove('visible');
+            document.body.style.overflow = '';
+        }
+
         function refreshSupplierCardsIfVisible() {
             if (document.getElementById('suppliersView')?.style.display === 'block') {
                 renderSuppliers();
@@ -6933,6 +7247,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         function logout() {
             if (!confirm('Logout?')) return;
             clearAdminAuth();
+            try { sessionStorage.removeItem('pro_invoice_user_role'); sessionStorage.removeItem('pro_invoice_user_name'); } catch(e) {}
             location.reload();
         }
 

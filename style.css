@@ -1942,6 +1942,63 @@
             }
         }
 
+        /* ==================== SALESMAN ROLE (read-only) ==================== */
+        /* When a salesman is logged in, hide every button that can mutate data.
+           View-only buttons (Print, PDF, QR, Email, WhatsApp, Back) are kept visible. */
+        body.role-salesman .btn-primary,
+        body.role-salesman [onclick*="showAddCustomerModal"],
+        body.role-salesman [onclick*="showAddSupplierModal"],
+        body.role-salesman [onclick*="showAddProductModal"],
+        body.role-salesman [onclick*="createNewInvoice"],
+        body.role-salesman [onclick*="showQuotationForm"],
+        body.role-salesman [onclick*="addItemInput"],
+        body.role-salesman [onclick*="saveInvoice"],
+        body.role-salesman [onclick*="saveSettings"],
+        body.role-salesman [onclick*="changeAdminCredentials"],
+        body.role-salesman [onclick*="showSalesmanModal"],
+        body.role-salesman [onclick*="deleteSalesman"],
+        body.role-salesman [onclick*="editCustomer"],
+        body.role-salesman [onclick*="deleteCustomer"],
+        body.role-salesman [onclick*="editSupplier"],
+        body.role-salesman [onclick*="deleteSupplier"],
+        body.role-salesman [onclick*="addSupplierPurchase"],
+        body.role-salesman [onclick*="deleteInvoice"],
+        body.role-salesman [onclick*="editInvoice"],
+        body.role-salesman [onclick*="markAsPaid"],
+        body.role-salesman [onclick*="deleteQuotation"],
+        body.role-salesman [onclick*="editProduct"],
+        body.role-salesman [onclick*="deleteProduct"],
+        body.role-salesman [onclick*="removeItemInput"],
+        body.role-salesman [onclick*="showAddExpense"],
+        body.role-salesman [onclick*="deleteExpense"],
+        body.role-salesman [onclick*="addAttendance"],
+        body.role-salesman [onclick*="deleteAttendance"],
+        body.role-salesman [onclick*="showAddEmployeeModal"],
+        body.role-salesman [onclick*="showAddLeaveModal"],
+        body.role-salesman [onclick*="showAddTaskModal"],
+        body.role-salesman .supplier-action-btn--edit,
+        body.role-salesman .supplier-action-btn--delete,
+        body.role-salesman #navSettings,
+        body.role-salesman #navCreate {
+            display: none !important;
+        }
+
+        /* Show a read-only badge next to the sidebar username */
+        body.role-salesman #sidebarUsername::after {
+            content: ' (Salesman)';
+            font-size: 11px;
+            opacity: 0.7;
+        }
+
+        /* Mobile hamburger / overlay (always in scope) */
+        .mobile-top-bar {
+            display: none;
+        }
+
+        .sidebar-overlay {
+            display: none;
+        }
+
         /* Mobile Breakpoint (max 768px) */
         @media (max-width: 768px) {
             html {
@@ -1952,16 +2009,83 @@
                 overflow-x: hidden;
             }
 
+            /* Sidebar — hidden off-screen by default on mobile */
             .sidebar {
-                width: 60px;
+                width: 280px;
                 position: fixed;
                 left: 0;
                 top: 0;
-                z-index: 1000;
+                z-index: 1100;
+                transform: translateX(-100%);
+                transition: transform 0.28s ease;
+                overflow-y: auto;
             }
 
-            .sidebar span:not(.logo i) {
-                display: none;
+            /* Sidebar open state */
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+
+            /* Dim overlay behind open sidebar */
+            .sidebar-overlay {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.45);
+                z-index: 1050;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.28s ease;
+            }
+
+            .sidebar-overlay.visible {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            /* Mobile top bar with hamburger */
+            .mobile-top-bar {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 10px 15px;
+                background: var(--card-bg);
+                border-bottom: 1px solid var(--border-color);
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                margin: -15px -15px 15px -15px;
+            }
+
+            .hamburger-btn {
+                background: none;
+                border: none;
+                color: var(--text-primary);
+                font-size: 20px;
+                cursor: pointer;
+                padding: 6px 8px;
+                border-radius: 8px;
+                line-height: 1;
+                flex-shrink: 0;
+            }
+
+            .hamburger-btn:hover {
+                background: var(--bg-secondary);
+            }
+
+            .mobile-title {
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--text-primary);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            /* Main content: no left margin since sidebar is off-screen */
+            .main-content {
+                margin-left: 0;
+                padding: 15px;
             }
 
             .logo {
@@ -1970,15 +2094,6 @@
 
             .logo i {
                 font-size: 24px;
-            }
-
-            .logo h3 {
-                font-size: 0;
-            }
-
-            .main-content {
-                margin-left: 60px;
-                padding: 15px;
             }
 
             .stats-grid {
