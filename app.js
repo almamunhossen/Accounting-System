@@ -1828,10 +1828,12 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             setActiveNav('navSuppliers');
             renderSuppliers(); // render immediately from local data
             if (isApiEnabled()) {
-                // Sync in background without blocking UI
-                Promise.all([syncSuppliersFromApi(), syncProductsFromApi()])
-                    .then(() => renderSuppliers())
-                    .catch(error => console.error(error));
+                // Sync in background without blocking UI — allSettled so one failure doesn't skip re-render
+                Promise.allSettled([syncSuppliersFromApi(), syncProductsFromApi()])
+                    .then(results => {
+                        results.forEach((r, i) => { if (r.status === 'rejected') console.warn('Supplier sync failed:', r.reason); });
+                        renderSuppliers();
+                    });
             }
         }
 
@@ -1840,7 +1842,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const statusFilter = document.getElementById('supplierStatusFilter')?.value || '';
             const filtered = suppliers.filter(s =>
                 String(s.id || '').toLowerCase().includes(searchTerm) ||
-                s.name.toLowerCase().includes(searchTerm) ||
+                (s.name || '').toLowerCase().includes(searchTerm) ||
                 (s.phone || '').toLowerCase().includes(searchTerm) ||
                 (s.email || '').toLowerCase().includes(searchTerm) ||
                 (s.company || '').toLowerCase().includes(searchTerm) ||
@@ -2221,11 +2223,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         }),
                         window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) })
                     ]);
-                    // Optimistic update: update local supplier instead of re-fetching all
+                    // Always update local supplier — partial API failures are just warnings
                     suppliers[idx] = supplier;
                 } catch (error) {
-                    console.error('Add purchase API failed:', error);
-                    return;
+                    console.warn('Add purchase API partial failure (saved locally):', error);
+                    suppliers[idx] = supplier;
                 }
             } else {
                 suppliers[idx] = supplier;
@@ -2240,7 +2242,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function paySupplierBill(id) {
-            const supplier = suppliers.find(s => s.id === id);
+            const supplier = suppliers.find(s => String(s.id) === String(id));
             if (!supplier) return;
             const financials = getSupplierFinancials(supplier);
             const invoiceSelect = document.getElementById('payBillInvoiceSelect');
@@ -2407,11 +2409,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         }),
                         window.APIClient.postData('updateSupplier', { supplier: normalizeSupplierToApi(supplier) })
                     ]);
-                    // Optimistic update: update local supplier instead of re-fetching all
+                    // Always update local supplier — allSettled means partial failures are just warnings
                     suppliers[idx] = supplier;
                 } catch (error) {
-                    console.error('Pay bill API failed:', error);
-                    return;
+                    console.warn('Pay bill API partial failure (saved locally):', error);
+                    suppliers[idx] = supplier;
                 }
             } else {
                 suppliers[idx] = supplier;
