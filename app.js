@@ -122,28 +122,28 @@
         }
 
         function isAdminAuthenticated() {
-            if (sessionStorage.getItem(AUTH_SESSION_KEY) === '1') return true;
+            if (localStorage.getItem(AUTH_SESSION_KEY) === '1') return true;
             try {
-                const raw = sessionStorage.getItem(AUTH_PERSIST_KEY);
+                const raw = localStorage.getItem(AUTH_PERSIST_KEY);
                 if (!raw) return false;
                 const parsed = JSON.parse(raw);
                 const expiresAt = Number(parsed && parsed.expiresAt || 0);
                 if (!expiresAt || Date.now() > expiresAt) {
-                    sessionStorage.removeItem(AUTH_PERSIST_KEY);
+                    localStorage.removeItem(AUTH_PERSIST_KEY);
                     return false;
                 }
-                sessionStorage.setItem(AUTH_SESSION_KEY, '1');
+                localStorage.setItem(AUTH_SESSION_KEY, '1');
                 return true;
             } catch (error) {
-                sessionStorage.removeItem(AUTH_PERSIST_KEY);
+                localStorage.removeItem(AUTH_PERSIST_KEY);
                 return false;
             }
         }
 
         function persistAdminAuth() {
-            sessionStorage.setItem(AUTH_SESSION_KEY, '1');
+            localStorage.setItem(AUTH_SESSION_KEY, '1');
             try {
-                sessionStorage.setItem(AUTH_PERSIST_KEY, JSON.stringify({
+                localStorage.setItem(AUTH_PERSIST_KEY, JSON.stringify({
                     expiresAt: Date.now() + AUTH_PERSIST_TTL_MS
                 }));
             } catch (error) {
@@ -152,9 +152,9 @@
         }
 
         function clearAdminAuth() {
-            sessionStorage.removeItem(AUTH_SESSION_KEY);
+            localStorage.removeItem(AUTH_SESSION_KEY);
             try {
-                sessionStorage.removeItem(AUTH_PERSIST_KEY);
+                localStorage.removeItem(AUTH_PERSIST_KEY);
             } catch (error) {
                 console.warn('Unable to clear admin auth state:', error);
             }
