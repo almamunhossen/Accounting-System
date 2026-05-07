@@ -162,7 +162,7 @@
 
         function getLoginSecurityState() {
             try {
-                const raw = sessionStorage.getItem(LOGIN_SECURITY_KEY);
+                const raw = localStorage.getItem(LOGIN_SECURITY_KEY);
                 const parsed = raw ? JSON.parse(raw) : {};
                 return {
                     attempts: Number(parsed.attempts || 0),
@@ -175,7 +175,7 @@
 
         function setLoginSecurityState(state) {
             try {
-                sessionStorage.setItem(LOGIN_SECURITY_KEY, JSON.stringify({
+                localStorage.setItem(LOGIN_SECURITY_KEY, JSON.stringify({
                     attempts: Number(state?.attempts || 0),
                     lockUntil: Number(state?.lockUntil || 0)
                 }));
@@ -185,7 +185,7 @@
         }
 
         function clearLoginSecurityState() {
-            setLoginSecurityState({ attempts: 0, lockUntil: 0 });
+            localStorage.removeItem(LOGIN_SECURITY_KEY);
         }
 
         function registerFailedLoginAttempt() {
@@ -876,6 +876,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         async function syncCustomersFromApi() {
             const rows = await window.APIClient.getData('getCustomers');
+            console.log('API rows:', rows); // Debugging line
             customers = rows.map(normalizeCustomerFromApi);
             renderCustomers();
         }
@@ -1123,7 +1124,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         // ==================== INITIALIZATION ====================
         document.addEventListener('DOMContentLoaded', async () => {
-            setAuthGateState(false);
             applySidebarBranding();
             updateLoginSecurityUi();
             setInterval(updateLoginSecurityUi, 1000);
@@ -1141,6 +1141,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 }
                 setAuthGateState(true);
                 return;
+            } else {
+                setAuthGateState(false);
             }
 
             const usernameInput = document.getElementById('adminUsernameInput');
