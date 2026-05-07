@@ -93,7 +93,7 @@ const CRMClient = {
   async getCustomers(filters = {}) {
     this._log('Fetching customers with filters', filters);
     try {
-      const data = await APIClient.getData('getCustomers', { filters });
+      const data = await APIClient.getData('getCustomers', filters);
       return data || [];
     } catch (error) {
       this._log('Error fetching customers', error);
@@ -167,7 +167,7 @@ const CRMClient = {
   async getSuppliers(filters = {}) {
     this._log('Fetching suppliers with filters', filters);
     try {
-      const data = await APIClient.getData('getSuppliers', { filters });
+      const data = await APIClient.getData('getSuppliers', filters);
       return data || [];
     } catch (error) {
       this._log('Error fetching suppliers', error);
@@ -485,10 +485,10 @@ const CRMExport = {
       'Last Contact': c.last_contact || '-'
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Customers');
-    XLSX.writeFile(wb, filename);
+    const ws = window.XLSX.utils.json_to_sheet(data);
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+    window.XLSX.writeFile(wb, filename);
     APIClient.showToast('Customers exported to Excel', 'success');
   },
 
@@ -514,10 +514,10 @@ const CRMExport = {
       'Contact Person': s.contact_person || '-'
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Suppliers');
-    XLSX.writeFile(wb, filename);
+    const ws = window.XLSX.utils.json_to_sheet(data);
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, 'Suppliers');
+    window.XLSX.writeFile(wb, filename);
     APIClient.showToast('Suppliers exported to Excel', 'success');
   },
 

@@ -3,3 +3,4 @@
 *.gs
 *.txt
 *.gitignore
+**/data/

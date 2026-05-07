@@ -545,7 +545,7 @@ try {
         setApiUrl: function setApiUrl(url) {
             const nextUrl = normalizeApiUrl(url);
             // Security: only accept Google Apps Script /exec URLs or empty string
-            if (nextUrl && !/^https:\/\/script\.google\.com\/macros\/s//i.test(nextUrl)) {
+            if (nextUrl && !/^https:\/\/script\.google\.com\/macros\/s\//i.test(nextUrl)) {
                 console.warn('setApiUrl: rejected non-Apps-Script URL:', nextUrl);
                 return global.API_URL;
             }

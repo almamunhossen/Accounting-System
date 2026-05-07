@@ -1,4 +1,4 @@
-﻿  // ==================== DATA STORAGE ====================
+  // ==================== DATA STORAGE ====================
         function toggleLoginPassword(btn) {
             const input = btn.closest('.login-field').querySelector('.login-input');
             const icon = btn.querySelector('i');
@@ -606,8 +606,11 @@
         }
 
         function loadSupplierPurchaseHistory() {
-            supplierPurchaseHistory = {};
-            normalizeAllSupplierPurchaseHistory();
+            // Supplier purchase history is synced from the backend via syncSupplierPurchasesFromApi().
+            // Do not reset the object here — it is populated after API login.
+            if (!supplierPurchaseHistory || typeof supplierPurchaseHistory !== 'object') {
+                supplierPurchaseHistory = {};
+            }
         }
 
         function saveSupplierPurchaseHistory() {
@@ -940,7 +943,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         async function syncCustomersFromApi() {
             const rows = await window.APIClient.getData('getCustomers');
-            console.log('API rows:', rows); // Debugging line
             customers = rows.map(normalizeCustomerFromApi);
             renderCustomers();
         }
@@ -1893,6 +1895,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 (s.phone || '').toLowerCase().includes(searchTerm) ||
                 (s.email || '').toLowerCase().includes(searchTerm) ||
                 (s.company || '').toLowerCase().includes(searchTerm) ||
+                (s.contactPerson || '').toLowerCase().includes(searchTerm) ||
                 (s.address || '').toLowerCase().includes(searchTerm)
             ).filter(s => statusFilter === '' || (s.status || 'Active') === statusFilter);
 
@@ -2386,7 +2389,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             supplier.totalPurchase = financials.totalPurchase;
             supplier.totalPaid = Number(supplier.totalPaid || 0) + amount;
             supplier.dueAmount = Math.max(0, supplier.totalPurchase - supplier.totalPaid);
-            supplier.lastPurchaseDate = payDate;
+            supplier.lastPaymentDate = payDate;
 
             updateSupplierPurchaseHistoryEntry(currentSupplierId, currentSupplierPaymentEntryId, entry => {
                 const nextPaidAmount = Number(entry.paidAmount || 0) + amount;
