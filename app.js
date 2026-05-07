@@ -1298,8 +1298,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 loginCompanyNameEl.textContent = companyName;
             }
 
-            applyBrandLogo(logoImg, logoIcon, settings.companyLogo);
-            applyBrandLogo(loginLogoImg, loginLogoIcon, settings.companyLogo);
+            const logoUrl = settings.companyLogo || (() => { try { return localStorage.getItem(LS_LOGO_KEY) || ''; } catch(e) { return ''; } })();
+            applyBrandLogo(logoImg, logoIcon, logoUrl);
+            applyBrandLogo(loginLogoImg, loginLogoIcon, logoUrl);
         }
 
         function saveData() {
@@ -1308,6 +1309,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         // ---- localStorage cache for instant UI on next page load ----
         const LS_CACHE_KEY = 'pic_gs_cache_v2';
+        const LS_LOGO_KEY = 'pic_company_logo_v1';
+        const LS_SETTINGS_KEY = 'pic_company_settings_v1';
 
         function saveApiCache() {
             try {
@@ -1332,6 +1335,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function loadApiCache() {
+            // Restore settings from localStorage so company logo/name survive page refresh
+            try {
+                const rawSettings = localStorage.getItem(LS_SETTINGS_KEY);
+                if (rawSettings) {
+                    const s = JSON.parse(rawSettings);
+                    writeStoredJson('pro_invoice_settings', s);
+                }
+            } catch (ex) { /* ignore */ }
             try {
                 const raw = localStorage.getItem(LS_CACHE_KEY);
                 if (!raw) return;
@@ -5402,11 +5413,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('googleSheetsUrlInput').value = settings.googleSheetsUrl || defaultSheetsUrl;
             document.getElementById('companyLogoDriveFolderId').value = settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             document.getElementById('companyAddress').innerHTML = settings.companyAddress || '';
-            // Show logo preview if exists
+            // Show logo preview if exists — fallback to localStorage
             const logoPreview = document.getElementById('companyLogoPreview');
             logoPreview.innerHTML = '';
-            if (settings.companyLogo) {
-                logoPreview.innerHTML = `<img src="${settings.companyLogo}" alt="Logo" style="max-width:120px;max-height:80px;">`;
+            const savedLogoUrl = settings.companyLogo || (() => { try { return localStorage.getItem(LS_LOGO_KEY) || ''; } catch(e) { return ''; } })();
+            if (savedLogoUrl) {
+                const localFallback = (() => { try { return localStorage.getItem(LS_LOGO_KEY) || ''; } catch(e) { return ''; } })();
+                logoPreview.innerHTML = `<img src="${savedLogoUrl}" alt="Logo" style="max-width:120px;max-height:80px;" onerror="this.src='${localFallback}';this.onerror=null;">`;
             }
             document.getElementById('companyLogoInput').value = '';
             pendingCompanyLogoData = '';
@@ -5437,6 +5450,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     pendingCompanyLogoData = e.target.result;
+                    try { localStorage.setItem(LS_LOGO_KEY, pendingCompanyLogoData); } catch(ex) {}
                     const logoPreview = document.getElementById('companyLogoPreview');
                     if (logoPreview) {
                         logoPreview.innerHTML = `<img src="${pendingCompanyLogoData}" alt="Pasted Logo" style="max-width:120px;max-height:80px;">`;
@@ -5470,7 +5484,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 if (pasteArea) {
                     pasteArea.innerText = 'Logo selected successfully. Click Save Settings to apply.';
                 }
-                pendingCompanyLogoData = '';
+                pendingCompanyLogoData = dataUrl;
+                try { localStorage.setItem(LS_LOGO_KEY, dataUrl); } catch(ex) {}
             } catch (error) {
                 alert(`Failed to read selected image: ${error?.message || error}`);
             }
@@ -5710,10 +5725,24 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
 
             writeStoredJson('pro_invoice_settings', settings);
+            // Persist settings and logo to localStorage for cross-session availability
+            try { localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); } catch(ex) {}
+            if (settings.companyLogo) {
+                try { localStorage.setItem(LS_LOGO_KEY, settings.companyLogo); } catch(ex) {}
+            }
             saveSettingsToApi(settings).catch(error => {
                 console.error('Failed to sync settings to API.', error);
             });
             setVatTaxEnabled(settings.vatTaxEnabled);
+            // Update logo preview immediately with saved URL (with local fallback on error)
+            const savedLogo = settings.companyLogo;
+            if (savedLogo) {
+                const previewEl = document.getElementById('companyLogoPreview');
+                if (previewEl) {
+                    const localBase64 = (() => { try { return localStorage.getItem(LS_LOGO_KEY) || ''; } catch(e) { return ''; } })();
+                    previewEl.innerHTML = `<img src="${savedLogo}" alt="Logo" style="max-width:120px;max-height:80px;" onerror="this.src='${localBase64}';this.onerror=null;">`;
+                }
+            }
             applySidebarBranding();
             alert('Settings saved!');
             showSettings();
