@@ -977,6 +977,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (!isApiEnabled()) return;
             const payload = {};
             Object.entries(settings || {}).forEach(([key, value]) => {
+                // Never send base64 data URLs to Google Sheets — cells have a 50k char limit
+                // and base64 images are much larger, causing silent truncation and broken images.
+                // Only sync HTTP/Drive URLs; base64 is kept in localStorage only.
+                if (key === 'companyLogo' && typeof value === 'string' && /^data:/i.test(value)) return;
                 payload[key] = typeof value === 'string' ? value : JSON.stringify(value);
             });
             try {
@@ -5820,7 +5824,15 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
             if (!preview || !placeholder || !removeBtn) return;
 
-            if (photoData) {
+            // Only show image if it's a valid base64 data URL or an HTTP URL
+            const isValidImage = photoData && (/^data:image\//i.test(photoData) || /^https?:\/\//i.test(photoData));
+
+            if (isValidImage) {
+                preview.onerror = function () {
+                    preview.style.display = 'none';
+                    placeholder.style.display = 'block';
+                    removeBtn.style.display = 'none';
+                };
                 preview.src = photoData;
                 preview.style.display = 'block';
                 placeholder.style.display = 'none';
@@ -5959,7 +5971,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             mobile: employee.mobile,
                             home_address: employee.homeAddress,
                             website: employee.website,
-                            profile_photo: employee.profilePhoto
+                            // Only store Drive/HTTP URLs in Google Sheets - never base64 (too large, gets truncated)
+                            profile_photo: /^https?:\/\//i.test(String(employee.profilePhoto || '')) ? employee.profilePhoto : ''
                         }
                     });
                     // Optimistic update
@@ -6059,7 +6072,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 <\/style><\/head><body>
 <div class="card">
   <div class="card-header">
-        ${emp.profilePhoto ? `<img src="${emp.profilePhoto}" alt="${escapeHtml(emp.name)}" class="profile-photo">` : '<div class="profile-photo-placeholder"><span>PHOTO</span></div>'}
+        ${emp.profilePhoto && /^https?:\/\//i.test(emp.profilePhoto) ? `<img src="${emp.profilePhoto}" alt="${escapeHtml(emp.name)}" class="profile-photo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="profile-photo-placeholder" style="display:none"><span>PHOTO</span></div>` : '<div class="profile-photo-placeholder"><span>PHOTO</span></div>'}
     <h2>${escapeHtml(emp.name)}</h2>
     <p>${escapeHtml(emp.role || '')}${emp.department ? ' &mdash; ' + escapeHtml(emp.department) : ''}</p>
   </div>
