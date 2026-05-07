@@ -877,6 +877,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         async function syncCustomersFromApi() {
             const rows = await window.APIClient.getData('getCustomers');
             customers = rows.map(normalizeCustomerFromApi);
+            renderCustomers();
         }
 
         async function syncProductsFromApi() {
