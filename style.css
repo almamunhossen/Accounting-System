@@ -524,10 +524,6 @@
             max-height: 320px;
         }
 
-        .chart-card h3 {
-            margin-bottom: 15px;
-        }
-
         .chart-card {
             background: var(--card-bg);
             border-radius: 15px;

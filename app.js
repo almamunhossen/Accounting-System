@@ -1,4 +1,4 @@
-  // ==================== DATA STORAGE ====================
+﻿  // ==================== DATA STORAGE ====================
         function toggleLoginPassword(btn) {
             const input = btn.closest('.login-field').querySelector('.login-input');
             const icon = btn.querySelector('i');
@@ -17,6 +17,7 @@
         let quotations = [];
         let savedProducts = [];
         let expenses = [];
+        let accountingEntries = [];
         let hrEmployees = [];
         let hrAttendance = [];
         let hrLeaves = [];
@@ -28,6 +29,7 @@
         let currentCustomerId = null;
         let currentSupplierId = null;
         let currentProductId = null;
+        let currentEditingInvoiceId = null;
         let currentAttendanceId = null;
         let currentLeaveId = null;
         let currentSupplierHistoryId = null;
@@ -520,6 +522,17 @@
             };
         }
 
+        function normalizeAccountingFromApi(row) {
+            return {
+                id: String(row.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+                date: row.date || '',
+                description: row.description || '',
+                income: Number(row.income || 0),
+                expense: Number(row.expense || 0),
+                balance: Number(row.balance || 0)
+            };
+        }
+
         function normalizeSupplierFromApi(row) {
             return {
                 id: String(row.id || Date.now().toString()),
@@ -943,7 +956,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         async function syncCustomersFromApi() {
             const rows = await window.APIClient.getData('getCustomers');
-            customers = rows.map(normalizeCustomerFromApi);
+            // Filter out corrupted rows (missing name) that were created by old backend versions
+            customers = rows.filter(r => String(r.name || '').trim()).map(normalizeCustomerFromApi);
+            saveApiCache();
             renderCustomers();
         }
 
@@ -973,6 +988,20 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         async function syncExpensesFromApi() {
             const rows = await window.APIClient.getData('getExpenses');
             expenses = rows.map(normalizeExpenseFromApi);
+        }
+
+        async function syncAccountingFromApi() {
+            try {
+                const rows = await window.APIClient.getData('getAccounting');
+                accountingEntries = rows.map(normalizeAccountingFromApi);
+            } catch (error) {
+                const msg = String(error?.message || '');
+                if (/Unknown action:\s*getAccounting/i.test(msg)) {
+                    accountingEntries = [];
+                    return;
+                }
+                throw error;
+            }
         }
 
         async function syncQuotationsFromApi() {
@@ -1273,6 +1302,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     { name: 'Quotations', run: syncQuotationsFromApi },
                     { name: 'HR', run: syncHRFromApi },
                     { name: 'Expenses', run: syncExpensesFromApi },
+                    { name: 'Accounting', run: syncAccountingFromApi },
                     { name: 'SupplierPurchases', run: syncSupplierPurchasesFromApi }
                 ];
 
@@ -1370,6 +1400,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     quotations,
                     products: savedProducts,
                     expenses,
+                    accountingEntries,
                     hrEmployees,
                     hrAttendance,
                     hrLeaves,
@@ -1402,6 +1433,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (Array.isArray(c.quotations) && c.quotations.length) quotations = c.quotations;
                 if (Array.isArray(c.products) && c.products.length) savedProducts = c.products;
                 if (Array.isArray(c.expenses) && c.expenses.length) expenses = c.expenses;
+                if (Array.isArray(c.accountingEntries) && c.accountingEntries.length) accountingEntries = c.accountingEntries;
                 if (Array.isArray(c.hrEmployees) && c.hrEmployees.length) hrEmployees = c.hrEmployees;
                 if (Array.isArray(c.hrAttendance) && c.hrAttendance.length) hrAttendance = c.hrAttendance;
                 if (Array.isArray(c.hrLeaves) && c.hrLeaves.length) hrLeaves = c.hrLeaves;
@@ -1413,9 +1445,231 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             }
         }
 
+        // ==================== ACCOUNTING ====================
+        let currentAccountingId = null;
+
+        function showAccounting() {
+            document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            const view = document.getElementById('accountingView');
+            if (view) view.style.display = 'block';
+            const btn = document.getElementById('navAccounting');
+            if (btn) btn.classList.add('active');
+            const title = document.getElementById('mobilePageTitle');
+            if (title) title.textContent = 'Accounting';
+            renderAccounting();
+        }
+
+        function renderAccounting() {
+            const search = (document.getElementById('accountingSearchInput')?.value || '').toLowerCase();
+            const filtered = accountingEntries.filter(e =>
+                (e.date || '').toLowerCase().includes(search) ||
+                (e.description || '').toLowerCase().includes(search)
+            );
+            const tbody = document.getElementById('accountingTableBody');
+            if (!tbody) return;
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-secondary)">No accounting entries found.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = filtered.map(e => `
+                <tr>
+                    <td>${e.date || ''}</td>
+                    <td>${e.description || ''}</td>
+                    <td style="color:#28a745">${formatCurrency(e.income)}</td>
+                    <td style="color:#dc3545">${formatCurrency(e.expense)}</td>
+                    <td style="font-weight:600">${formatCurrency(e.balance)}</td>
+                    <td>
+                        <button onclick="editAccountingEntry('${e.id}')" class="btn-secondary" style="padding:4px 8px;font-size:12px;margin-right:4px"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteAccountingEntry('${e.id}')" class="btn-danger" style="padding:4px 8px;font-size:12px"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function showAddAccountingModal() {
+            currentAccountingId = null;
+            document.getElementById('accountingModalTitle').textContent = 'Add Accounting Entry';
+            document.getElementById('accountingDate').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('accountingDescription').value = '';
+            document.getElementById('accountingIncome').value = '0';
+            document.getElementById('accountingExpense').value = '0';
+            document.getElementById('accountingBalance').value = '0';
+            document.getElementById('accountingModal').style.display = 'flex';
+        }
+
+        function closeAccountingModal() {
+            document.getElementById('accountingModal').style.display = 'none';
+        }
+
+        function editAccountingEntry(id) {
+            const entry = accountingEntries.find(e => e.id === id);
+            if (!entry) return;
+            currentAccountingId = id;
+            document.getElementById('accountingModalTitle').textContent = 'Edit Accounting Entry';
+            document.getElementById('accountingDate').value = entry.date || '';
+            document.getElementById('accountingDescription').value = entry.description || '';
+            document.getElementById('accountingIncome').value = entry.income || 0;
+            document.getElementById('accountingExpense').value = entry.expense || 0;
+            document.getElementById('accountingBalance').value = entry.balance || 0;
+            document.getElementById('accountingModal').style.display = 'flex';
+        }
+
+        async function saveAccountingEntry() {
+            const entry = {
+                id: currentAccountingId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                date: document.getElementById('accountingDate').value,
+                description: document.getElementById('accountingDescription').value.trim(),
+                income: Number(document.getElementById('accountingIncome').value) || 0,
+                expense: Number(document.getElementById('accountingExpense').value) || 0,
+                balance: Number(document.getElementById('accountingBalance').value) || 0
+            };
+            if (!entry.date) { window.APIClient?.showToast?.('Please enter a date.', 'error'); return; }
+            try {
+                if (currentAccountingId) {
+                    await window.APIClient.postData('updateAccounting', { entry });
+                    const idx = accountingEntries.findIndex(e => e.id === currentAccountingId);
+                    if (idx !== -1) accountingEntries[idx] = entry;
+                } else {
+                    await window.APIClient.postData('addAccounting', { entry });
+                    accountingEntries.push(entry);
+                }
+                saveApiCache();
+                closeAccountingModal();
+                renderAccounting();
+                window.APIClient?.showToast?.('Accounting entry saved.', 'success');
+            } catch (err) {
+                window.APIClient?.showToast?.('Failed to save: ' + (err?.message || err), 'error');
+            }
+        }
+
+        async function deleteAccountingEntry(id) {
+            if (!confirm('Delete this accounting entry?')) return;
+            try {
+                await window.APIClient.postData('deleteAccounting', { id });
+                accountingEntries = accountingEntries.filter(e => e.id !== id);
+                saveApiCache();
+                renderAccounting();
+                window.APIClient?.showToast?.('Entry deleted.', 'success');
+            } catch (err) {
+                window.APIClient?.showToast?.('Failed to delete: ' + (err?.message || err), 'error');
+            }
+        }
+
+        // ==================== EXPENSES ====================
+        let currentExpenseId = null;
+
+        function showExpenses() {
+            document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            const view = document.getElementById('expensesView');
+            if (view) view.style.display = 'block';
+            const btn = document.getElementById('navExpenses');
+            if (btn) btn.classList.add('active');
+            const title = document.getElementById('mobilePageTitle');
+            if (title) title.textContent = 'Expenses';
+            renderExpenses();
+            if (isApiEnabled()) {
+                syncExpensesFromApi()
+                    .then(() => renderExpenses())
+                    .catch(err => console.error(err));
+            }
+        }
+
+        function renderExpenses() {
+            const search = (document.getElementById('expenseSearchInput')?.value || '').toLowerCase();
+            const filtered = expenses.filter(e =>
+                (e.date || '').toLowerCase().includes(search) ||
+                (e.category || '').toLowerCase().includes(search) ||
+                (e.description || '').toLowerCase().includes(search)
+            );
+            const tbody = document.getElementById('expensesTableBody');
+            if (!tbody) return;
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-secondary)">No expenses found.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = filtered.map(e => `
+                <tr>
+                    <td>${escapeHtml(e.date || '')}</td>
+                    <td>${escapeHtml(e.category || '')}</td>
+                    <td>${escapeHtml(e.description || '')}</td>
+                    <td style="text-align:right;color:#dc3545;font-weight:600;">${formatCurrency(convertCurrency(e.amount))}</td>
+                    <td style="text-align:center;">
+                        <button onclick="editExpenseEntry('${e.id}')" class="btn-secondary" style="padding:4px 8px;font-size:12px;margin-right:4px"><i class="fas fa-edit"></i></button>
+                        <button onclick="deleteExpenseEntry('${e.id}')" class="btn-danger" style="padding:4px 8px;font-size:12px"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function showAddExpenseModal() {
+            currentExpenseId = null;
+            document.getElementById('expenseModalTitle').textContent = 'Add Expense';
+            document.getElementById('expenseDate').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('expenseCategory').value = 'General';
+            document.getElementById('expenseDescription').value = '';
+            document.getElementById('expenseAmount').value = '0';
+            document.getElementById('expenseModal').style.display = 'flex';
+        }
+
+        function closeExpenseModal() {
+            document.getElementById('expenseModal').style.display = 'none';
+        }
+
+        function editExpenseEntry(id) {
+            const entry = expenses.find(e => e.id === id);
+            if (!entry) return;
+            currentExpenseId = id;
+            document.getElementById('expenseModalTitle').textContent = 'Edit Expense';
+            document.getElementById('expenseDate').value = entry.date || '';
+            document.getElementById('expenseCategory').value = entry.category || 'General';
+            document.getElementById('expenseDescription').value = entry.description || '';
+            document.getElementById('expenseAmount').value = entry.amount || 0;
+            document.getElementById('expenseModal').style.display = 'flex';
+        }
+
+        async function saveExpenseEntry() {
+            const entry = {
+                id: currentExpenseId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                date: document.getElementById('expenseDate').value,
+                category: document.getElementById('expenseCategory').value || 'General',
+                description: document.getElementById('expenseDescription').value.trim(),
+                amount: Number(document.getElementById('expenseAmount').value) || 0
+            };
+            if (!entry.date) { window.APIClient?.showToast?.('Please enter a date.', 'error'); return; }
+            if (entry.amount <= 0) { window.APIClient?.showToast?.('Please enter a valid amount.', 'error'); return; }
+            try {
+                if (currentExpenseId) {
+                    await window.APIClient.postData('updateExpense', { expense: entry });
+                    const idx = expenses.findIndex(e => e.id === currentExpenseId);
+                    if (idx !== -1) expenses[idx] = entry;
+                } else {
+                    await window.APIClient.postData('addExpense', { expense: entry });
+                    expenses.push(entry);
+                }
+                saveApiCache();
+                closeExpenseModal();
+                renderExpenses();
+                window.APIClient?.showToast?.('Expense saved.', 'success');
+            } catch (err) {
+                window.APIClient?.showToast?.('Failed to save: ' + (err?.message || err), 'error');
+            }
+        }
+
+        async function deleteExpenseEntry(id) {
+            if (!confirm('Delete this expense?')) return;
+            try {
+                await window.APIClient.postData('deleteExpense', { id });
+                expenses = expenses.filter(e => e.id !== id);
+                saveApiCache();
+                renderExpenses();
+                window.APIClient?.showToast?.('Expense deleted.', 'success');
+            } catch (err) {
+                window.APIClient?.showToast?.('Failed to delete: ' + (err?.message || err), 'error');
+            }
+        }
+
         // ==================== DASHBOARD ====================
-        function updateDashboard() {
-            document.getElementById('totalCustomers').innerText = customers.length;
+        function updateDashboard() {            document.getElementById('totalCustomers').innerText = customers.length;
             document.getElementById('totalInvoices').innerText = invoices.length;
             const totalRevenue = invoices.reduce((sum, inv) => sum + convertCurrency(inv.total), 0);
             document.getElementById('totalRevenue').innerHTML = formatCurrency(totalRevenue);
@@ -1451,7 +1705,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (ctx1) {
                 revenueChart = new Chart(ctx1, {
                     type: 'bar',
-                    data: { labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], datasets: [{ label: 'Revenue', data: [0,0,0,0,0,0], backgroundColor: '#4a90e2' }] }
+                    data: { labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], datasets: [{ label: 'Revenue', data: [0,0,0,0,0,0,0,0,0,0,0,0], backgroundColor: '#4a90e2' }] }
                 });
             }
             if (ctx2) {
@@ -1464,10 +1718,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function updateCharts() {
-            const monthlyData = Array(6).fill(0);
+            const currentYear = new Date().getFullYear();
+            const monthlyData = Array(12).fill(0);
             invoices.forEach(inv => {
-                const month = new Date(inv.date).getMonth();
-                if (month < 6) monthlyData[month] += convertCurrency(inv.total);
+                const d = new Date(inv.date);
+                if (d.getFullYear() === currentYear) monthlyData[d.getMonth()] += convertCurrency(inv.total);
             });
             if (revenueChart) revenueChart.data.datasets[0].data = monthlyData;
             if (revenueChart) revenueChart.update();
@@ -1486,7 +1741,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const filtered = customers.filter(c => 
                 (
                     String(c.id || '').toLowerCase().includes(searchTerm) ||
-                    c.name.toLowerCase().includes(searchTerm) ||
+                    String(c.name || '').toLowerCase().includes(searchTerm) ||
                     (c.phone || '').toLowerCase().includes(searchTerm) ||
                     (c.email || '').toLowerCase().includes(searchTerm) ||
                     (c.company || '').toLowerCase().includes(searchTerm) ||
@@ -1643,14 +1898,21 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (isApiEnabled()) {
                 try {
                     const action = currentCustomerId ? 'updateCustomer' : 'addCustomer';
-                    await window.APIClient.postData(action, { customer: normalizeCustomerToApi(customerData) });
-                    // Optimistic update: update/add locally instead of re-fetching all customers
+                    const apiData = normalizeCustomerToApi(customerData);
+                    // Send fields at BOTH levels: { customer: {...}, ...fields }
+                    // This supports both old deployed backends (read payload.name) and new (read payload.customer.name)
+                    const response = await window.APIClient.postData(action, Object.assign({}, apiData, { customer: apiData }));
+                    // Use the server-returned record (with the actual assigned ID) so local cache matches API after refresh
+                    const savedRecord = (response && response.data && response.data.id)
+                        ? normalizeCustomerFromApi(response.data)
+                        : normalizeCustomerFromApi(normalizeCustomerToApi(customerData));
                     if (currentCustomerId) {
                         const index = customers.findIndex(c => c.id === currentCustomerId);
-                        if (index !== -1) customers[index] = normalizeCustomerFromApi(normalizeCustomerToApi(customerData));
+                        if (index !== -1) customers[index] = savedRecord;
                     } else {
-                        customers.push(normalizeCustomerFromApi(normalizeCustomerToApi(customerData)));
+                        customers.push(savedRecord);
                     }
+                    saveApiCache();
                 } catch (error) {
                     console.error('Customer API save failed:', error);
                     return;
@@ -1676,8 +1938,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (customer) {
                 const historyHtml = (customer.contactHistory || []).map(h => `
                     <div class="contact-item">
-                        <span><i class="fas fa-calendar"></i> ${h.date}</span>
-                        <span>${h.note}</span>
+                        <span><i class="fas fa-calendar"></i> ${escapeHtml(h.date)}</span>
+                        <span>${escapeHtml(h.note)}</span>
                     </div>
                 `).join('');
                 document.getElementById('contactHistoryList').innerHTML = historyHtml || '<p>No contact history</p>';
@@ -1705,10 +1967,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const customerOrders = invoices.filter(inv => inv.customerId === customerId);
             const ordersHtml = customerOrders.map(order => `
                 <div class="order-item">
-                    <span>${order.invoiceNo}</span>
-                    <span>${order.date}</span>
+                    <span>${escapeHtml(order.invoiceNo)}</span>
+                    <span>${escapeHtml(order.date)}</span>
                     <span>${formatCurrency(convertCurrency(order.total))}</span>
-                    <span class="status ${order.status}">${order.status}</span>
+                    <span class="status ${escapeHtml(order.status)}">${escapeHtml(order.status)}</span>
                 </div>
             `).join('');
             document.getElementById('orderHistoryList').innerHTML = ordersHtml || '<p>No orders found</p>';
@@ -2247,6 +2509,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             purchase: {
                                 id: newPurchaseId,
                                 supplier_id: currentSupplierId,
+                                invoice_no: invoiceNo,
                                 product_name: productName,
                                 quantity,
                                 unit_price: unitCost,
@@ -2433,6 +2696,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             purchase: {
                                 id: currentSupplierPaymentEntryId,
                                 supplier_id: currentSupplierId,
+                                invoice_no: purchaseEntry.invoiceNo || '',
                                 product_name: purchaseEntry.productName || '',
                                 quantity: purchaseEntry.quantity || 0,
                                 unit_price: purchaseEntry.unitCost || 0,
@@ -2512,16 +2776,20 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             if (isApiEnabled()) {
                 try {
-                    await window.APIClient.postData(currentSupplierId ? 'updateSupplier' : 'addSupplier', {
-                        supplier: normalizeSupplierToApi(supplierData)
-                    });
-                    // Optimistic update: update/add locally instead of re-fetching all suppliers
+                    const supplierApiData = normalizeSupplierToApi(supplierData);
+                    const supplierAction = currentSupplierId ? 'updateSupplier' : 'addSupplier';
+                    // Send fields at BOTH levels for old/new backend compatibility
+                    const supplierResponse = await window.APIClient.postData(supplierAction, Object.assign({}, supplierApiData, { supplier: supplierApiData }));
+                    const savedSupplier = (supplierResponse && supplierResponse.data && supplierResponse.data.id)
+                        ? normalizeSupplierFromApi(supplierResponse.data)
+                        : supplierData;
                     if (currentSupplierId) {
                         const index = suppliers.findIndex(s => s.id === currentSupplierId);
-                        if (index !== -1) suppliers[index] = supplierData;
+                        if (index !== -1) suppliers[index] = savedSupplier;
                     } else {
-                        suppliers.push(supplierData);
+                        suppliers.push(savedSupplier);
                     }
+                    saveApiCache();
                 } catch (error) {
                     console.error('Supplier API save failed:', error);
                     return;
@@ -2763,8 +3031,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     } else {
                         savedProducts.push(productData);
                     }
+                    window.APIClient?.showToast?.(currentProductId ? 'Product updated successfully' : 'Product added successfully', 'success');
                 } catch (error) {
-                    console.error('Product API save failed:', error);
+                    // api.js already shows the specific error toast — just log and abort.
+                    console.error('Product API save failed:', error?.message || error);
                     return;
                 }
             } else {
@@ -3595,7 +3865,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             }
             
             const invoice = {
-                id: Date.now().toString(),
+                id: currentEditingInvoiceId || Date.now().toString(),
                 invoiceNo: document.getElementById('invoiceNoDisplay')?.value,
                 customerId: customerId,
                 customerName: customerName,
@@ -3615,13 +3885,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 total: window.currentTotal || 0,
                 amountDue: window.currentAmountDue || 0,
                 timestamp: window.currentInvoiceTimestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-                status: 'Unpaid',
+                status: currentEditingInvoiceId ? (invoices.find(i => i.id === currentEditingInvoiceId)?.status || 'Unpaid') : 'Unpaid',
                 currency: currentCurrency
             };
+            const isEditing = !!currentEditingInvoiceId;
 
             if (isApiEnabled()) {
                 try {
-                    if (!customers.find(c => c.id === customerId)) {
+                    if (!isEditing && !customers.find(c => c.id === customerId)) {
                         await window.APIClient.postData('addCustomer', {
                             customer: normalizeCustomerToApi({
                                 id: customerId,
@@ -3637,59 +3908,77 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         });
                     }
 
-                    // Run invoice + transaction save in parallel for speed
-                    await Promise.all([
-                        window.APIClient.postData('addInvoice', {
-                            invoice: {
-                                id: invoice.id,
-                                invoice_no: invoice.invoiceNo,
-                                customer_id: invoice.customerId,
-                                customer_name: invoice.customerName,
-                                date: invoice.date,
-                                due_date: invoice.dueDate,
-                                subtotal: invoice.subtotal,
-                                total: invoice.total,
-                                vat: invoice.vatRate,
-                                discount: invoice.discount,
-                                shipping: invoice.shipping,
-                                advance_payment: invoice.advancePayment,
-                                amount_due: invoice.amountDue,
-                                currency: invoice.currency,
-                                status: invoice.status,
-                                items: JSON.stringify(invoice.items || [])
-                            }
-                        }),
-                        window.APIClient.postData('addCustomerTransaction', {
+                    const invoicePayload = {
+                        id: invoice.id,
+                        invoice_no: invoice.invoiceNo,
+                        customer_id: invoice.customerId,
+                        customer_name: invoice.customerName,
+                        customer_phone: invoice.customerPhone || '',
+                        customer_email: invoice.customerEmail || '',
+                        customer_company: invoice.customerCompany || '',
+                        customer_vat: invoice.customerVatNumber || '',
+                        customer_address: invoice.customerAddress || '',
+                        date: invoice.date,
+                        due_date: invoice.dueDate,
+                        subtotal: invoice.subtotal,
+                        total: invoice.total,
+                        vat: invoice.vatRate,
+                        discount: invoice.discount,
+                        shipping: invoice.shipping,
+                        advance_payment: invoice.advancePayment,
+                        amount_due: invoice.amountDue,
+                        currency: invoice.currency,
+                        status: invoice.status,
+                        items: JSON.stringify(invoice.items || [])
+                    };
+
+                    const apiCalls = [
+                        window.APIClient.postData(isEditing ? 'updateInvoice' : 'addInvoice', { invoice: invoicePayload })
+                    ];
+                    if (!isEditing) {
+                        apiCalls.push(window.APIClient.postData('addCustomerTransaction', {
                             transaction: {
                                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                                 customer_id: customerId,
-                                type: 'invoice',
+                                type: 'Invoice',
                                 amount: Number(invoice.total || 0),
                                 date: invoice.date,
                                 note: `Invoice ${invoice.invoiceNo}`
                             }
-                        })
-                    ]);
+                        }));
+                    }
+                    await Promise.all(apiCalls);
 
-                    // Optimistic update: add invoice locally, refresh customer financials
-                    invoices.push(invoice);
+                    // Optimistic update
+                    if (isEditing) {
+                        const idx = invoices.findIndex(i => i.id === invoice.id);
+                        if (idx !== -1) invoices[idx] = invoice;
+                    } else {
+                        invoices.push(invoice);
+                    }
                     await refreshCustomerFinancials(customerId);
                 } catch (error) {
                     console.error('Invoice API save failed:', error);
                     return;
                 }
             } else {
-                invoices.push(invoice);
+                if (isEditing) {
+                    const idx = invoices.findIndex(i => i.id === invoice.id);
+                    if (idx !== -1) invoices[idx] = invoice;
+                } else {
+                    invoices.push(invoice);
+                }
                 await refreshCustomerFinancials(customerId);
                 saveData();
             }
 
-            nextInvoiceNumber++;
+            currentEditingInvoiceId = null;
+            if (!isEditing) nextInvoiceNumber++;
             generateInvoiceNumber();
             updateDashboard();
             updateCharts();
             showInvoiceList();
-            alert('Invoice saved successfully!');
+            window.APIClient?.showToast?.(isEditing ? 'Invoice updated successfully' : 'Invoice saved successfully', 'success');
         }
 
         function sendInvoiceEmail() {
@@ -3837,6 +4126,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function editInvoice(id) {
             const invoice = invoices.find(i => i.id === id);
             if (invoice) {
+                currentEditingInvoiceId = id;
                 const customerRecord = findCustomerRecord(invoice.customerId, invoice.customerName);
                 createNewInvoice();
                 populateInvoiceCustomerFields({
@@ -3875,8 +4165,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         await window.APIClient.postData('deleteInvoice', { id: id });
                         // Optimistic update: remove locally instead of re-fetching all
                         invoices = invoices.filter(i => i.id !== id);
+                        window.APIClient?.showToast?.('Invoice deleted successfully', 'success');
                     } catch (error) {
                         console.error('Invoice API delete failed:', error);
+                        window.APIClient?.showToast?.('Failed to delete invoice. Please try again.', 'error');
                         return;
                     }
                 } else {
@@ -3901,6 +4193,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                     invoice_no: invoice.invoiceNo,
                                     customer_id: invoice.customerId,
                                     customer_name: invoice.customerName,
+                                    customer_phone: invoice.customerPhone || '',
+                                    customer_email: invoice.customerEmail || '',
+                                    customer_company: invoice.customerCompany || '',
+                                    customer_vat: invoice.customerVatNumber || '',
+                                    customer_address: invoice.customerAddress || '',
                                     date: invoice.date,
                                     due_date: invoice.dueDate,
                                     subtotal: invoice.subtotal,
@@ -3919,7 +4216,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                 transaction: {
                                     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                                     customer_id: invoice.customerId,
-                                    type: 'payment',
+                                    type: 'Payment',
                                     amount: Number(invoice.total || 0),
                                     date: new Date().toISOString().split('T')[0],
                                     note: `Payment for invoice ${invoice.invoiceNo}`
@@ -3928,8 +4225,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         ]);
                         // Optimistic update: invoice status already set above, refresh customer
                         await refreshCustomerFinancials(invoice.customerId);
+                        window.APIClient?.showToast?.('Invoice marked as paid', 'success');
                     } catch (error) {
                         console.error('Invoice API update failed:', error);
+                        invoice.status = 'Unpaid'; // revert optimistic status change
+                        window.APIClient?.showToast?.('Failed to mark invoice as paid. Please try again.', 'error');
                         return;
                     }
                 } else {
@@ -4057,7 +4357,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         }
                     });
                 } catch (error) {
-                    console.error('Failed to update quotation status in API.', error);
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*updateQuotation/i.test(message)) {
+                        saveData();
+                        window.APIClient?.showToast?.('Quotation updated locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Failed to update quotation status in API.', error);
+                    }
                 }
             } else {
                 saveData();
@@ -4131,8 +4437,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 status: 'Uninvoiced'
             };
             
-            quotations.push(quotation);
-
             if (isApiEnabled()) {
                 try {
                     await window.APIClient.postData('addQuotation', {
@@ -4150,15 +4454,28 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             items: JSON.stringify(quotation.items || [])
                         }
                     });
+                    quotations.push(quotation);
                 } catch (error) {
-                    console.error('Failed to save quotation in API.', error);
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*addQuotation/i.test(message)) {
+                        // Deployed Apps Script is outdated — save locally and prompt user to redeploy
+                        quotations.push(quotation);
+                        saveData();
+                        window.APIClient?.showToast?.('Quotation saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Failed to save quotation in API.', error);
+                        window.APIClient?.showToast?.('Failed to save quotation: ' + (message || 'Please try again.'), 'error');
+                        return;
+                    }
                 }
+            } else {
+                quotations.push(quotation);
+                saveData();
             }
 
             nextQuotationNumber++;
-            saveData();
             showQuotations();
-            alert('Quotation saved successfully!');
+            window.APIClient?.showToast?.('Quotation saved successfully', 'success');
         }
 
         function printQuotation() {
@@ -4215,18 +4532,29 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         async function deleteQuotation(id) {
             const index = quotations.findIndex(q => q.id === id);
-            if (index !== -1 && confirm('Delete this quotation?')) {
-                if (isApiEnabled()) {
-                    try {
-                        await window.APIClient.postData('deleteQuotation', { id });
-                    } catch (error) {
+            if (index === -1 || !confirm('Delete this quotation?')) return;
+            if (isApiEnabled()) {
+                try {
+                    await window.APIClient.postData('deleteQuotation', { id });
+                    quotations.splice(index, 1);
+                    window.APIClient?.showToast?.('Quotation deleted successfully', 'success');
+                } catch (error) {
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*deleteQuotation/i.test(message)) {
+                        quotations.splice(index, 1);
+                        saveData();
+                        window.APIClient?.showToast?.('Quotation deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
                         console.error('Failed to delete quotation from API.', error);
+                        window.APIClient?.showToast?.('Failed to delete quotation. Please try again.', 'error');
+                        return;
                     }
                 }
+            } else {
                 quotations.splice(index, 1);
                 saveData();
-                showQuotations();
             }
+            showQuotations();
         }
 
         function downloadQuotationPDF() {
@@ -6117,6 +6445,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         // ==================== UTILITIES ====================
         function createNewInvoice() {
             try {
+                // Clear any editing state
+                currentEditingInvoiceId = null;
                 // Hide all views and show invoice form
                 document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
                 document.getElementById('invoiceFormView').style.display = 'block';
@@ -6413,9 +6743,11 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     } else {
                         hrEmployees.push(employee);
                     }
+                    window.APIClient?.showToast?.(window.currentEmployeeId ? 'Employee updated successfully' : 'Employee added successfully', 'success');
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*(addEmployee|updateEmployee)/i.test(message)) {
+                        // Deployed Apps Script is outdated — save locally and prompt user to redeploy
                         if (window.currentEmployeeId) {
                             const idx = hrEmployees.findIndex(e => e.id === window.currentEmployeeId);
                             if (idx !== -1) hrEmployees[idx] = employee;
@@ -6423,9 +6755,10 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             hrEmployees.push(employee);
                         }
                         saveData();
-                        window.APIClient?.showToast?.('Employee saved locally. Redeploy Apps Script to save to Google Sheets.', 'error');
+                        window.APIClient?.showToast?.('Employee saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
                         console.error('Employee API save failed:', error);
+                        window.APIClient?.showToast?.('Failed to save employee: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
                 }
@@ -6455,16 +6788,19 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     hrEmployees = hrEmployees.filter(e => e.id !== id);
                     hrAttendance = hrAttendance.filter(a => a.employeeId !== id);
                     hrLeaves = hrLeaves.filter(l => l.employeeId !== id);
+                    window.APIClient?.showToast?.('Employee deleted successfully', 'success');
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*deleteEmployee/i.test(message)) {
+                        // Deployed Apps Script is outdated — delete locally and prompt user to redeploy
                         hrEmployees = hrEmployees.filter(e => e.id !== id);
                         hrAttendance = hrAttendance.filter(a => a.employeeId !== id);
                         hrLeaves = hrLeaves.filter(l => l.employeeId !== id);
                         saveData();
-                        window.APIClient?.showToast?.('Employee deleted locally. Redeploy Apps Script to sync deletes to Google Sheets.', 'error');
+                        window.APIClient?.showToast?.('Employee deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
                         console.error('Delete employee failed:', error);
+                        window.APIClient?.showToast?.('Failed to delete employee: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
                 }
@@ -6648,9 +6984,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     const existingAtt = hrAttendance.find(a => a.id === record.id);
                     if (existingAtt) { existingAtt.employeeId = record.employeeId; existingAtt.date = record.date; existingAtt.status = record.status; }
                     else hrAttendance.push(record);
+                    window.APIClient?.showToast?.('Attendance saved successfully', 'success');
                 } catch (error) {
-                    console.error('Attendance API save failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*(addAttendance|updateAttendance)/i.test(message)) {
+                        const existingAtt = hrAttendance.find(a => a.id === record.id);
+                        if (existingAtt) { existingAtt.employeeId = record.employeeId; existingAtt.date = record.date; existingAtt.status = record.status; }
+                        else hrAttendance.push(record);
+                        saveData();
+                        window.APIClient?.showToast?.('Attendance saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Attendance API save failed:', error);
+                        window.APIClient?.showToast?.('Failed to save attendance: ' + (message || 'Unknown error'), 'error');
+                        return;
+                    }
                 }
             } else {
                 const existing = hrAttendance.find(a => a.id === record.id) || duplicate;
@@ -6676,9 +7023,18 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     await window.APIClient.postData('deleteAttendance', { id });
                     // Optimistic update
                     hrAttendance = hrAttendance.filter(item => item.id !== id);
+                    window.APIClient?.showToast?.('Attendance deleted successfully', 'success');
                 } catch (error) {
-                    console.error('Attendance delete failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*deleteAttendance/i.test(message)) {
+                        hrAttendance = hrAttendance.filter(item => item.id !== id);
+                        saveData();
+                        window.APIClient?.showToast?.('Attendance deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Attendance delete failed:', error);
+                        window.APIClient?.showToast?.('Failed to delete attendance: ' + (message || 'Unknown error'), 'error');
+                        return;
+                    }
                 }
             } else {
                 hrAttendance = hrAttendance.filter(item => item.id !== id);
@@ -6769,9 +7125,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     const existingLeave = hrLeaves.find(l => l.id === leave.id);
                     if (existingLeave) { Object.assign(existingLeave, leave); }
                     else hrLeaves.push(leave);
+                    window.APIClient?.showToast?.('Leave saved successfully', 'success');
                 } catch (error) {
-                    console.error('Leave API save failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*(addLeave|updateLeave)/i.test(message)) {
+                        const existingLeave = hrLeaves.find(l => l.id === leave.id);
+                        if (existingLeave) { Object.assign(existingLeave, leave); }
+                        else hrLeaves.push(leave);
+                        saveData();
+                        window.APIClient?.showToast?.('Leave saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Leave API save failed:', error);
+                        window.APIClient?.showToast?.('Failed to save leave: ' + (message || 'Unknown error'), 'error');
+                        return;
+                    }
                 }
             } else {
                 const existing = hrLeaves.find(item => item.id === leave.id);
@@ -6799,9 +7166,18 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     await window.APIClient.postData('deleteLeave', { id });
                     // Optimistic update
                     hrLeaves = hrLeaves.filter(item => item.id !== id);
+                    window.APIClient?.showToast?.('Leave deleted successfully', 'success');
                 } catch (error) {
-                    console.error('Leave delete failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*deleteLeave/i.test(message)) {
+                        hrLeaves = hrLeaves.filter(item => item.id !== id);
+                        saveData();
+                        window.APIClient?.showToast?.('Leave deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Leave delete failed:', error);
+                        window.APIClient?.showToast?.('Failed to delete leave: ' + (message || 'Unknown error'), 'error');
+                        return;
+                    }
                 }
             } else {
                 hrLeaves = hrLeaves.filter(item => item.id !== id);
@@ -6846,9 +7222,18 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     });
                     // Optimistic update
                     hrTasks.push(task);
+                    window.APIClient?.showToast?.('Task added successfully', 'success');
                 } catch (error) {
-                    console.error('Task API save failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*addTask/i.test(message)) {
+                        hrTasks.push(task);
+                        saveData();
+                        window.APIClient?.showToast?.('Task saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Task API save failed:', error);
+                        window.APIClient?.showToast?.('Failed to add task: ' + (message || 'Unknown error'), 'error');
+                        return;
+                    }
                 }
             } else {
                 hrTasks.push(task);
@@ -6874,9 +7259,18 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             status: task.done ? 'Completed' : 'Open'
                         }
                     });
+                    window.APIClient?.showToast?.(task.done ? 'Task marked complete' : 'Task reopened', 'success');
                 } catch (error) {
-                    console.error('Task API update failed:', error);
-                    return;
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*updateTask/i.test(message)) {
+                        saveData();
+                        window.APIClient?.showToast?.('Task updated locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
+                    } else {
+                        console.error('Task API update failed:', error);
+                        task.done = !task.done; // revert optimistic change
+                        window.APIClient?.showToast?.('Failed to update task: ' + (message || 'Unknown error'), 'error');
+                        return;
+                    }
                 }
             } else {
                 saveData();
@@ -6892,9 +7286,38 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             container.innerHTML = hrTasks.map(task => `
                 <div class="report-list-item">
                     <span>${escapeHtml(task.title)} (${escapeHtml(task.priority)})</span>
-                    <button class="btn-icon" onclick="toggleHRTask('${task.id}')">${task.done ? 'Completed' : 'Open'}</button>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <button class="btn-icon" onclick="toggleHRTask('${task.id}')">${task.done ? 'Completed' : 'Open'}</button>
+                        <button onclick="deleteHRTask('${task.id}')" class="btn-icon" style="background:#fee2e2;color:#b91c1c;"><i class="fas fa-trash"></i> Delete</button>
+                    </div>
                 </div>
             `).join('') || '<p>No tasks.</p>';
+        }
+
+        async function deleteHRTask(id) {
+            if (!confirm('Delete this task?')) return;
+            if (isApiEnabled()) {
+                try {
+                    await window.APIClient.postData('deleteTask', { id });
+                    hrTasks = hrTasks.filter(t => t.id !== id);
+                    saveApiCache();
+                    window.APIClient?.showToast?.('Task deleted', 'success');
+                } catch (error) {
+                    const message = String(error?.message || error || '');
+                    if (/Unknown action:\s*deleteTask/i.test(message)) {
+                        hrTasks = hrTasks.filter(t => t.id !== id);
+                        saveData();
+                        window.APIClient?.showToast?.('Task deleted locally. Please redeploy to sync.', 'error');
+                    } else {
+                        window.APIClient?.showToast?.('Failed to delete task: ' + message, 'error');
+                        return;
+                    }
+                }
+            } else {
+                hrTasks = hrTasks.filter(t => t.id !== id);
+                saveData();
+            }
+            renderHRData();
         }
 
         function renderHRStats() {
@@ -7108,10 +7531,10 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 updateSavedProductsDatalist();
                 renderProducts();
                 refreshSupplierCardsIfVisible();
-                console.log(`Product "${productName}" deleted successfully`);
+                window.APIClient?.showToast?.('Product deleted successfully', 'success');
             } catch (error) {
                 console.error('Error deleting product:', error);
-                alert('Error deleting product. Please try again.');
+                window.APIClient?.showToast?.('Failed to delete product. Please try again.', 'error');
             }
         }
 

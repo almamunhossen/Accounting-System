@@ -1,6 +1,6 @@
 // API client for Google Apps Script backend
 // Set your deployed Apps Script Web App URL here.
-window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycby95Ut1SU6Aw-3PXnr_JH2Tz2-1CnGWP42T8JGE7qtf8pNicwfTIJxnqBZ9h8HGO1aYoA/exec";
+window.API_URL = window.API_URL || "https://script.google.com/macros/s/AKfycbzraUPEldplydz2JjdAvKuZNo1FoNqKGYW4H4Jx11LUxsKh3lO_aVp0EUeY3ZG-IYRP/exec";
 
 try {
     const persistedApiUrl = sessionStorage.getItem("gs_api_url") || "";
@@ -570,4 +570,3 @@ try {
         }
     };
 })(window);
-

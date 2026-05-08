@@ -106,6 +106,14 @@
                     <i class="fas fa-chart-bar"></i>
                     <span>Reports</span>
                 </button>
+                <button onclick="showAccounting(); closeMobileSidebar()" class="nav-btn" id="navAccounting" name="acc-name" title="Accounting">
+                    <i class="fas fa-book"></i>
+                    <span>Accounting</span>
+                </button>
+                <button onclick="showExpenses(); closeMobileSidebar()" class="nav-btn" id="navExpenses" name="exp-name" title="Expenses">
+                    <i class="fas fa-receipt"></i>
+                    <span>Expenses</span>
+                </button>
                 <button onclick="showSettings(); closeMobileSidebar()" class="nav-btn" id="navSettings" name="set-name" title="Settings">
                     <i class="fas fa-cog"></i>
                     <span>Settings</span>
@@ -371,9 +379,67 @@
 
             </div>
 
+            <!-- Accounting View -->
+            <div id="accountingView" class="view" style="display:none;">
+                <div class="view-header" style="display:flex;justify-content:space-between;margin-bottom:20px;align-items:center;">
+                    <h1><i class="fas fa-book"></i> Accounting</h1>
+                    <button onclick="showAddAccountingModal()" class="btn-primary">
+                        <i class="fas fa-plus"></i> Add Entry
+                    </button>
+                </div>
+                <div class="search-bar" style="margin-bottom:16px;">
+                    <input type="text" id="accountingSearchInput" placeholder="Search by date or description..." onkeyup="renderAccounting()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color);">
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;background:var(--card-bg);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
+                        <thead>
+                            <tr style="background:var(--primary);color:#fff;">
+                                <th style="padding:12px 16px;text-align:left;">Date</th>
+                                <th style="padding:12px 16px;text-align:left;">Description</th>
+                                <th style="padding:12px 16px;text-align:right;">Income</th>
+                                <th style="padding:12px 16px;text-align:right;">Expense</th>
+                                <th style="padding:12px 16px;text-align:right;">Balance</th>
+                                <th style="padding:12px 16px;text-align:center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountingTableBody">
+                            <tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-secondary)">No accounting entries found.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Expenses View -->
+            <div id="expensesView" class="view" style="display:none;">
+                <div class="view-header" style="display:flex;justify-content:space-between;margin-bottom:20px;align-items:center;">
+                    <h1><i class="fas fa-receipt"></i> Expenses</h1>
+                    <button onclick="showAddExpenseModal()" class="btn-primary">
+                        <i class="fas fa-plus"></i> Add Expense
+                    </button>
+                </div>
+                <div class="search-bar" style="margin-bottom:16px;">
+                    <input type="text" id="expenseSearchInput" placeholder="Search by date, category or description..." onkeyup="renderExpenses()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color);">
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;background:var(--card-bg);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
+                        <thead>
+                            <tr style="background:var(--primary);color:#fff;">
+                                <th style="padding:12px 16px;text-align:left;">Date</th>
+                                <th style="padding:12px 16px;text-align:left;">Category</th>
+                                <th style="padding:12px 16px;text-align:left;">Description</th>
+                                <th style="padding:12px 16px;text-align:right;">Amount</th>
+                                <th style="padding:12px 16px;text-align:center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expensesTableBody">
+                            <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-secondary)">No expenses found.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Products View -->
-            <div id="productsView" class="view">
-                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center;">
+            <div id="productsView" class="view">                <div class="view-header" style="display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center;">
                     <div>
                         <h1><i class="fas fa-box"></i> All Products & Services</h1>
                         <p style="color: var(--text-secondary); margin-top: 5px; font-size: 14px;">Manage your product and service catalog</p>
@@ -1577,7 +1643,7 @@
     <div id="productModal" class="modal">
         <div class="modal-content">
             <div class="modal-header" style="display: flex; justify-content: space-between;">
-                <h3>Add Product / Service</h3>
+                <h3 id="productModalTitle">Add Product / Service</h3>
                 <span onclick="closeProductModal()" style="cursor: pointer;">&times;</span>
             </div>
             <form id="productForm">
@@ -1619,7 +1685,7 @@
                     <input type="checkbox" id="productModalDontUpdateQty">
                     <label for="productModalDontUpdateQty" style="margin: 0;">Don't update quantity on invoice (On / Off)</label>
                 </div>
-                <button type="submit" class="btn-primary">Save Product</button>
+                <button type="submit" id="productModalSubmitBtn" class="btn-primary">Save Product</button>
             </form>
         </div>
     </div>
@@ -1741,6 +1807,83 @@
             <i class="fas fa-moon"></i> Dark/Light
         </button>
     </div>
+    <!-- Expense Modal -->
+    <div id="expenseModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:500px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <h3 id="expenseModalTitle">Add Expense</h3>
+                <span onclick="closeExpenseModal()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="expenseDate" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="expenseCategory" class="form-control">
+                        <option value="General">General</option>
+                        <option value="Rent">Rent</option>
+                        <option value="Salary">Salary</option>
+                        <option value="Utilities">Utilities</option>
+                        <option value="Marketing">Marketing</option>
+                        <option value="Transport">Transport</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="expenseDescription" class="form-control" placeholder="e.g. Office rent, Staff salary...">
+                </div>
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" id="expenseAmount" class="form-control" min="0" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:10px;padding:16px;">
+                <button onclick="closeExpenseModal()" class="btn-secondary">Cancel</button>
+                <button onclick="saveExpenseEntry()" class="btn-primary"><i class="fas fa-save"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounting Modal -->
+    <div id="accountingModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:500px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <h3 id="accountingModalTitle">Add Accounting Entry</h3>
+                <span onclick="closeAccountingModal()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="accountingDate" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="accountingDescription" class="form-control" placeholder="e.g. Sales revenue, Rent payment...">
+                </div>
+                <div class="form-group">
+                    <label>Income</label>
+                    <input type="number" id="accountingIncome" class="form-control" min="0" step="0.01" value="0">
+                </div>
+                <div class="form-group">
+                    <label>Expense</label>
+                    <input type="number" id="accountingExpense" class="form-control" min="0" step="0.01" value="0">
+                </div>
+                <div class="form-group">
+                    <label>Balance</label>
+                    <input type="number" id="accountingBalance" class="form-control" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:10px;padding:16px;">
+                <button onclick="closeAccountingModal()" class="btn-secondary">Cancel</button>
+                <button onclick="saveAccountingEntry()" class="btn-primary"><i class="fas fa-save"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
     <script src="api.js"></script>
     <script src="crm-integration.js"></script>
     <script src="app.js"></script>
