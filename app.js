@@ -1130,6 +1130,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 vatRate: Number(row.vat || row.vatRate || 0),
                 shipping: Number(row.shipping || 0),
                 advancePayment: Number(row.advance_payment || row.advancePayment || 0),
+                paymentMethod: row.payment_method || row.paymentMethod || 'Cash',
                 total: Number(row.total || 0),
                 amountDue: Number(row.amount_due || row.amountDue || row.total || 0),
                 status: row.status || 'Unpaid',
@@ -3882,6 +3883,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 vatRate: parseFloat(document.getElementById('vatRateInput')?.value) || 0,
                 shipping: parseFloat(document.getElementById('shippingInput')?.value) || 0,
                 advancePayment: parseFloat(document.getElementById('advancePaymentInput')?.value) || 0,
+                paymentMethod: document.getElementById('paymentMethodInput')?.value || 'Cash',
                 total: window.currentTotal || 0,
                 amountDue: window.currentAmountDue || 0,
                 timestamp: window.currentInvoiceTimestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
@@ -3926,6 +3928,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         discount: invoice.discount,
                         shipping: invoice.shipping,
                         advance_payment: invoice.advancePayment,
+                        payment_method: invoice.paymentMethod || 'Cash',
                         amount_due: invoice.amountDue,
                         currency: invoice.currency,
                         status: invoice.status,
@@ -4085,6 +4088,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('vatRateInput').value = invoice.vatRate || 0;
             document.getElementById('shippingInput').value = invoice.shipping || 0;
             document.getElementById('advancePaymentInput').value = invoice.advancePayment || 0;
+            const pmSelectPrint = document.getElementById('paymentMethodInput');
+            if (pmSelectPrint) pmSelectPrint.value = invoice.paymentMethod || 'Cash';
             window.currentInvoiceTimestamp = invoice.timestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
             // Restore items
             const itemsContainer = document.getElementById('invoiceItemsTableBody');
@@ -4144,6 +4149,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 document.getElementById('vatRateInput').value = invoice.vatRate;
                 document.getElementById('shippingInput').value = invoice.shipping;
                 document.getElementById('advancePaymentInput').value = invoice.advancePayment || 0;
+                const pmSelect = document.getElementById('paymentMethodInput');
+                if (pmSelect) pmSelect.value = invoice.paymentMethod || 'Cash';
                 window.currentInvoiceTimestamp = invoice.timestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
                 const itemsContainer = document.getElementById('invoiceItemsTableBody');
                 if (itemsContainer) {
@@ -6466,13 +6473,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 const formFields = [
                     'customerNameInput', 'customerPhoneInput', 'customerEmailInput',
                     'customerCompanyInput', 'customerVatInput', 'customerAddressInput', 'vatRateInput',
-                    'discountInput', 'shippingInput', 'advancePaymentInput', 'dueDate'
+                    'discountInput', 'shippingInput', 'advancePaymentInput', 'dueDate', 'paymentMethodInput'
                 ];
                 formFields.forEach(fieldId => {
                     const field = document.getElementById(fieldId);
                     if (field) {
-                        field.value = fieldId === 'vatRateInput' ? '15' : 
-                                     fieldId === 'discountInput' ? '0' : '';
+                        field.value = fieldId === 'vatRateInput' ? '15' :
+                                     fieldId === 'discountInput' ? '0' :
+                                     fieldId === 'paymentMethodInput' ? 'Cash' : '';
                     }
                 });
                 
