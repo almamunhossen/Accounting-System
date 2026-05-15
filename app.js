@@ -5957,7 +5957,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('companyEmail').value = settings.companyEmail || '';
             document.getElementById('companyWebsite').value = settings.companyWebsite || '';
             document.getElementById('apiUrlInput').value = (window.API_URL || sessionStorage.getItem('gs_api_url') || '').trim();
-            const defaultSheetsUrl = 'https://docs.google.com/spreadsheets/d/1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0/edit';
+            const defaultSheetsUrl =
+              "https://docs.google.com/spreadsheets/d/17wXBjzJOfYpvqxnGerjnrCnsMQZBPS_xMv76tRsHcxA/edit";
             document.getElementById('googleSheetsUrlInput').value = settings.googleSheetsUrl || defaultSheetsUrl;
             document.getElementById('companyLogoDriveFolderId').value = settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID;
             document.getElementById('companyAddress').innerHTML = settings.companyAddress || '';
