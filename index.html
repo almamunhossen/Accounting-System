@@ -701,7 +701,7 @@
                         style="border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary);"
                     />
                 </div>
-                <div id="quotationsList" class="overflow-x-auto rounded-[8px] bg-white p-4 shadow-lg"></div>
+                <div id="quotationsList" style="overflow-x:auto;border-radius:8px;background:var(--card-bg);padding:16px;box-shadow:0 4px 16px rgba(0,0,0,0.08);"></div>
             </div>
 
             <!-- Quotation Form View -->
@@ -1327,7 +1327,7 @@
             <form id="customerForm">
                 <div class="form-group">
                     <label>Customer ID</label>
-                    <input type="text" id="customerIdDisplay" readonly style="background: #f1f5f9; cursor: not-allowed;">
+                    <input type="text" id="customerIdDisplay" readonly style="background: var(--bg-secondary); cursor: not-allowed;">
                 </div>
                 <div class="form-group">
                     <label>Name *</label>
@@ -1528,7 +1528,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Due Amount <span style="font-size:11px;color:#64748b;">(auto-calculated)</span></label>
+                    <label>Due Amount <span style="font-size:11px;color:var(--text-secondary);">(auto-calculated)</span></label>
                     <input type="number" id="supplierDueAmount" value="0" step="0.01" readonly style="background:var(--bg-secondary,#f1f5f9);cursor:not-allowed;">
                 </div>
                 <button type="submit" class="btn-primary">Save Supplier</button>
@@ -1545,7 +1545,7 @@
             </div>
             <div style="padding:6px 0 12px;">
                 <p style="margin:0 0 4px;font-weight:600;" id="addPurchaseSupplierName"></p>
-                <p style="margin:0;color:#64748b;font-size:13px;">Current Total Purchases: <strong id="addPurchaseCurrentTotal">-</strong></p>
+                <p style="margin:0;color:var(--text-secondary);font-size:13px;">Current Total Purchases: <strong id="addPurchaseCurrentTotal">-</strong></p>
             </div>
             <div class="form-group">
                 <label>Invoice No *</label>
@@ -1567,7 +1567,7 @@
                 </div>
             </div>
             <div class="form-group">
-                <label>Total Amount <span style="font-size:11px;color:#64748b;">(auto-calculated)</span></label>
+                <label>Total Amount <span style="font-size:11px;color:var(--text-secondary);">(auto-calculated)</span></label>
                 <input type="number" id="addPurchaseAmount" min="0" step="0.01" value="0" readonly style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-secondary,#f1f5f9);cursor:not-allowed;">
             </div>
             <div class="form-group">
@@ -1591,7 +1591,7 @@
             <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
                 <div>
                     <h3 style="margin:0;"><i class="fas fa-history"></i> Purchase History</h3>
-                    <p id="supplierPurchaseHistorySupplierName" style="margin:4px 0 0;color:#64748b;font-size:13px;"></p>
+                    <p id="supplierPurchaseHistorySupplierName" style="margin:4px 0 0;color:var(--text-secondary);font-size:13px;"></p>
                 </div>
                 <span onclick="closeSupplierPurchaseHistoryModal()" style="cursor:pointer;font-size:1.4rem;">&times;</span>
             </div>
@@ -1608,7 +1608,7 @@
             <div class="modal-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
                 <div>
                     <h3 style="margin:0;"><i class="fas fa-chart-line"></i> <span id="supplierReportTitle">Supplier Report</span></h3>
-                    <p id="supplierReportMeta" style="margin:4px 0 0;color:#64748b;font-size:13px;"></p>
+                    <p id="supplierReportMeta" style="margin:4px 0 0;color:var(--text-secondary);font-size:13px;"></p>
                 </div>
                 <span onclick="closeSupplierReportModal()" style="cursor:pointer;font-size:1.4rem;">&times;</span>
             </div>
@@ -1646,17 +1646,17 @@
             </div>
             <div style="padding:6px 0 12px;">
                 <p style="margin:0 0 4px;font-weight:600;" id="payBillSupplierName"></p>
-                <p style="margin:0;color:#64748b;font-size:13px;">Due Amount: <strong id="payBillDueAmount">-</strong></p>
+                <p style="margin:0;color:var(--text-secondary);font-size:13px;">Due Amount: <strong id="payBillDueAmount">-</strong></p>
             </div>
             <div class="form-group">
                 <label>Select Invoice No *</label>
                 <select id="payBillInvoiceSelect" onchange="handleSupplierPaymentInvoiceChange()" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border-color);"></select>
             </div>
             <div style="background:var(--bg-secondary,#f8fafc);border:1px solid var(--border-color);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;">
-                <div style="display:flex;justify-content:space-between;gap:10px;"><span style="color:#64748b;">Product</span><strong id="payBillInvoiceProduct">-</strong></div>
-                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:#64748b;">Invoice Total</span><strong id="payBillInvoiceTotal">-</strong></div>
-                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:#64748b;">Already Paid</span><strong id="payBillInvoicePaid">-</strong></div>
-                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:#64748b;">Invoice Due</span><strong id="payBillInvoiceDue">-</strong></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;"><span style="color:var(--text-secondary);">Product</span><strong id="payBillInvoiceProduct">-</strong></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:var(--text-secondary);">Invoice Total</span><strong id="payBillInvoiceTotal">-</strong></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:var(--text-secondary);">Already Paid</span><strong id="payBillInvoicePaid">-</strong></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;"><span style="color:var(--text-secondary);">Invoice Due</span><strong id="payBillInvoiceDue">-</strong></div>
             </div>
             <div class="form-group">
                 <label>Payment Amount *</label>
@@ -1750,11 +1750,11 @@
                 <div class="form-group">
                     <label>Profile Photo</label>
                     <input type="file" id="hrEmployeePhoto" accept="image/*">
-                    <small style="display:block;margin-top:6px;color:#6b7280;">JPG, PNG, or WEBP up to 1 MB.</small>
+                    <small style="display:block;margin-top:6px;color:var(--text-secondary);">JPG, PNG, or WEBP up to 1 MB.</small>
                     <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;">
-                        <div style="width:88px;height:88px;border-radius:50%;overflow:hidden;border:1px solid #d1d5db;background:#f8fafc;display:flex;align-items:center;justify-content:center;">
+                        <div style="width:88px;height:88px;border-radius:50%;overflow:hidden;border:1px solid var(--border-color);background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;">
                             <img id="hrEmployeePhotoPreview" alt="Employee photo preview" style="width:100%;height:100%;object-fit:cover;display:none;">
-                            <span id="hrEmployeePhotoPlaceholder" style="color:#94a3b8;font-size:12px;text-align:center;padding:8px;">No Photo</span>
+                            <span id="hrEmployeePhotoPlaceholder" style="color:var(--text-secondary);font-size:12px;text-align:center;padding:8px;">No Photo</span>
                         </div>
                         <button type="button" id="hrEmployeePhotoRemoveBtn" onclick="removeEmployeePhoto()" class="btn-secondary" style="display:none;">Remove Photo</button>
                     </div>

@@ -755,14 +755,14 @@
                     <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
                         <div>
                             <strong style="color:var(--text-primary);">${escapeHtml(entry.productName || 'Purchase')}</strong>
-                            <div style="margin-top:2px;color:#64748b;font-size:12px;">Invoice: ${escapeHtml(entry.invoiceNo || '-')} | <span style="font-weight:600;">${escapeHtml(entry.status || 'Unpaid')}</span></div>
+                            <div style="margin-top:2px;color:var(--text-secondary);font-size:12px;">Invoice: ${escapeHtml(entry.invoiceNo || '-')} | <span style="font-weight:600;">${escapeHtml(entry.status || 'Unpaid')}</span></div>
                         </div>
-                        <span style="white-space:nowrap;color:#1d4ed8;font-weight:600;">${formatCurrency(convertCurrency(Number(entry.total || 0)))}</span>
+                        <span style="white-space:nowrap;color:var(--accent);font-weight:600;">${formatCurrency(convertCurrency(Number(entry.total || 0)))}</span>
                     </div>
-                    <div style="margin-top:2px;color:#64748b;">Qty: ${escapeHtml(formatPurchaseQuantity(entry.quantity))} | Unit: ${formatCurrency(convertCurrency(Number(entry.unitCost || 0)))}</div>
-                    <div style="margin-top:2px;color:#64748b;">Paid: ${formatCurrency(convertCurrency(Number(entry.paidAmount || 0)))} | Due: ${formatCurrency(convertCurrency(Number(entry.dueAmount || 0)))}</div>
-                    <div style="margin-top:2px;color:#64748b;">${escapeHtml(entry.date || '-')}</div>
-                    ${entry.note ? `<div style="margin-top:2px;color:#475569;">${escapeHtml(entry.note)}</div>` : ''}
+                    <div style="margin-top:2px;color:var(--text-secondary);">Qty: ${escapeHtml(formatPurchaseQuantity(entry.quantity))} | Unit: ${formatCurrency(convertCurrency(Number(entry.unitCost || 0)))}</div>
+                    <div style="margin-top:2px;color:var(--text-secondary);">Paid: ${formatCurrency(convertCurrency(Number(entry.paidAmount || 0)))} | Due: ${formatCurrency(convertCurrency(Number(entry.dueAmount || 0)))}</div>
+                    <div style="margin-top:2px;color:var(--text-secondary);">${escapeHtml(entry.date || '-')}</div>
+                    ${entry.note ? `<div style="margin-top:2px;color:var(--text-secondary);">${escapeHtml(entry.note)}</div>` : ''}
                 </div>
             `).join('');
         }

@@ -281,6 +281,24 @@
         }
         /* ===== END SELECT & SEARCH DARK MODE ===== */
 
+        /* ===== READONLY INPUTS & MODAL HELPERS — DARK MODE ===== */
+
+        /* All readonly inputs — disabled-looking but dark-mode aware */
+        body.dark-mode input[readonly],
+        body.dark-mode textarea[readonly] {
+            background-color: var(--bg-secondary) !important;
+            color: var(--text-secondary) !important;
+            cursor: not-allowed;
+        }
+
+        /* Modal small/helper text that still uses hardcoded greys */
+        body.dark-mode .modal-content small,
+        body.dark-mode .modal-content .form-hint {
+            color: var(--text-secondary) !important;
+        }
+
+        /* ===== END READONLY INPUTS ===== */
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: var(--bg-primary);
