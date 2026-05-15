@@ -87,6 +87,11 @@
             --sidebar-bg: linear-gradient(135deg, #0f0f1a 0%, #0a0a15 100%);
         }
 
+        /* Invert only the Saudi Riyal SVG icon in dark mode so it stays visible */
+        body.dark-mode img[src*="Saudi_Riyal"] {
+            filter: invert(1);
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: var(--bg-primary);
