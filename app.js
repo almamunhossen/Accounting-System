@@ -3211,23 +3211,23 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 const rowId = itemCounter++;
                 const row = document.createElement('tr');
                 row.id = `item-row-${rowId}`;
-                row.className = 'hover:bg-slate-50';
+                row.className = 'invoice-item-row';
                 row.innerHTML = `
                     <td class="px-4 py-3">
-                        <input list="invoiceProductsDatalist" class="product-name w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" placeholder="Item / Service name" value="${escapeHtml(data.name || '')}">
+                        <input list="invoiceProductsDatalist" class="product-name w-full rounded-2xl px-3 py-2 text-sm invoice-item-input" placeholder="Item / Service name" value="${escapeHtml(data.name || '')}">
                     </td>
                     <td class="px-4 py-3">
-                        <input type="text" class="product-description w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" placeholder="Optional description" value="${escapeHtml(data.description || '')}">
+                        <input type="text" class="product-description w-full rounded-2xl px-3 py-2 text-sm invoice-item-input" placeholder="Optional description" value="${escapeHtml(data.description || '')}">
                     </td>
                     <td class="px-4 py-3 w-28">
-                        <input type="number" min="0" step="1" class="product-quantity w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" value="${data.quantity || 1}">
+                        <input type="number" min="0" step="1" class="product-quantity w-full rounded-2xl px-3 py-2 text-sm invoice-item-input" value="${data.quantity || 1}">
                     </td>
                     <td class="px-4 py-3 w-32">
-                        <input type="number" min="0" step="0.01" class="product-price w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" value="${data.price || 0}">
+                        <input type="number" min="0" step="0.01" class="product-price w-full rounded-2xl px-3 py-2 text-sm invoice-item-input" value="${data.price || 0}">
                     </td>
-                    <td class="px-4 py-3 w-32 text-right font-semibold text-slate-900 product-total">${formatCurrency(convertCurrency(0))}</td>
+                    <td class="px-4 py-3 w-32 text-right font-semibold invoice-item-total product-total">${formatCurrency(convertCurrency(0))}</td>
                     <td class="px-4 py-3 w-24 text-center">
-                        <button type="button" onclick="removeItemInput(${rowId})" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 hover:bg-rose-200" title="Delete Item">
+                        <button type="button" onclick="removeItemInput(${rowId})" class="invoice-item-delete inline-flex h-11 w-11 items-center justify-center rounded-2xl" title="Delete Item">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
