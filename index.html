@@ -1796,19 +1796,27 @@
         </div>
     </div>
 
-    <!-- Currency Selector -->
-    <div class="currency-selector">
-        <button class="currency-btn active" data-currency="SAR" onclick="setCurrency('SAR', this)">SR</button>
-        <button class="currency-btn" data-currency="BDT" onclick="setCurrency('BDT', this)">BDT</button>
-        <button class="currency-btn" data-currency="USD" onclick="setCurrency('USD', this)">USD</button>
-    </div>
-
-    <!-- Dark Mode Toggle -->
-    <div class="dark-mode-toggle">
-        <button onclick="toggleDarkMode()" class="btn-secondary">
-            <i class="fas fa-moon"></i> Dark/Light
+    <!-- Floating Controls Widget -->
+    <div class="floating-controls" id="floatingControls">
+        <div class="floating-panel" id="floatingPanel">
+            <div class="floating-panel-label">Theme</div>
+            <button onclick="toggleDarkMode()" class="floating-theme-btn" id="floatingThemeBtn">
+                <i class="fas fa-moon" id="floatingThemeIcon"></i>
+                <span id="floatingThemeLabel">Dark Mode</span>
+            </button>
+            <div class="floating-panel-divider"></div>
+            <div class="floating-panel-label">Currency</div>
+            <div class="floating-currency-row">
+                <button class="currency-btn active" data-currency="SAR" onclick="setCurrency('SAR', this)">﷼ SR</button>
+                <button class="currency-btn" data-currency="BDT" onclick="setCurrency('BDT', this)">৳ BDT</button>
+                <button class="currency-btn" data-currency="USD" onclick="setCurrency('USD', this)">$ USD</button>
+            </div>
+        </div>
+        <button class="floating-toggle-btn" id="floatingToggleBtn" onclick="toggleFloatingPanel()" title="Settings">
+            <i class="fas fa-sliders-h"></i>
         </button>
     </div>
+
     <!-- Expense Modal -->
     <div id="expenseModal" class="modal" style="display:none;">
         <div class="modal-content" style="max-width:500px;">

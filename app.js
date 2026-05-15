@@ -6593,8 +6593,37 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
         function toggleDarkMode() {
             document.body.classList.toggle('dark-mode');
-            sessionStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+            const isDark = document.body.classList.contains('dark-mode');
+            sessionStorage.setItem('darkMode', isDark);
+            syncFloatingPanelThemeBtn(isDark);
         }
+
+        function syncFloatingPanelThemeBtn(isDark) {
+            const icon  = document.getElementById('floatingThemeIcon');
+            const label = document.getElementById('floatingThemeLabel');
+            if (icon)  icon.className  = isDark ? 'fas fa-sun' : 'fas fa-moon';
+            if (label) label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+        }
+
+        function toggleFloatingPanel() {
+            const panel  = document.getElementById('floatingPanel');
+            const toggle = document.getElementById('floatingToggleBtn');
+            if (!panel) return;
+            const isOpen = panel.classList.contains('open');
+            panel.classList.toggle('open', !isOpen);
+            toggle.classList.toggle('active', !isOpen);
+        }
+
+        // Close panel when clicking outside
+        document.addEventListener('click', function(e) {
+            const controls = document.getElementById('floatingControls');
+            if (controls && !controls.contains(e.target)) {
+                const panel  = document.getElementById('floatingPanel');
+                const toggle = document.getElementById('floatingToggleBtn');
+                if (panel)  panel.classList.remove('open');
+                if (toggle) toggle.classList.remove('active');
+            }
+        });
 
         // ==================== UTILITIES ====================
         function createNewInvoice() {
@@ -7911,5 +7940,6 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         // Load dark mode preference
         if (sessionStorage.getItem('darkMode') === 'true') {
             document.body.classList.add('dark-mode');
+            syncFloatingPanelThemeBtn(true);
         }
 
