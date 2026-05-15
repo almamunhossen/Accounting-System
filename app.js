@@ -67,6 +67,67 @@
                 timer = setTimeout(() => fn.apply(this, args), wait);
             };
         }
+
+        // ===== ACTION DROPDOWN UTILITY =====
+        function toggleActionDropdown(btn, event) {
+            if (event) event.stopPropagation();
+            const menu = btn.nextElementSibling;
+            const isOpen = menu.classList.contains('open');
+
+            // Close all open dropdowns first
+            document.querySelectorAll('.action-dropdown-menu.open').forEach(m => {
+                m.classList.remove('open');
+                m.style.top = '';
+                m.style.left = '';
+            });
+
+            if (!isOpen) {
+                // Calculate position using fixed coordinates to escape table overflow clipping
+                const rect = btn.getBoundingClientRect();
+                const menuWidth = 175;
+                const gap = 6;
+
+                let top = rect.bottom + gap;
+                let left = rect.right - menuWidth;
+
+                // Keep within viewport horizontally
+                if (left < 6) left = rect.left;
+                if (left + menuWidth > window.innerWidth - 6) left = window.innerWidth - menuWidth - 6;
+
+                // Flip upward if too close to bottom of viewport
+                const estHeight = 280;
+                if (top + estHeight > window.innerHeight - 10) {
+                    top = rect.top - estHeight - gap;
+                    if (top < 6) top = rect.bottom + gap;
+                }
+
+                menu.style.top  = top + 'px';
+                menu.style.left = left + 'px';
+                menu.classList.add('open');
+            }
+        }
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.action-dropdown-btn')) {
+                document.querySelectorAll('.action-dropdown-menu.open').forEach(m => {
+                    m.classList.remove('open');
+                    m.style.top = '';
+                    m.style.left = '';
+                });
+            }
+        });
+        // Close dropdown when any menu item is clicked
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.action-dropdown-item')) {
+                setTimeout(() => {
+                    document.querySelectorAll('.action-dropdown-menu.open').forEach(m => {
+                        m.classList.remove('open');
+                        m.style.top = '';
+                        m.style.left = '';
+                    });
+                }, 80);
+            }
+        });
+        // ===== END ACTION DROPDOWN UTILITY =====
         const AUTH_SESSION_KEY = 'pro_invoice_admin_auth';
         const AUTH_PERSIST_KEY = 'pro_invoice_admin_auth_persist';
         const AUTH_PERSIST_TTL_MS = 12 * 60 * 60 * 1000;
@@ -1481,8 +1542,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     <td style="color:#dc3545">${formatCurrency(e.expense)}</td>
                     <td style="font-weight:600">${formatCurrency(e.balance)}</td>
                     <td>
-                        <button onclick="editAccountingEntry('${e.id}')" class="btn-secondary" style="padding:4px 8px;font-size:12px;margin-right:4px"><i class="fas fa-edit"></i></button>
-                        <button onclick="deleteAccountingEntry('${e.id}')" class="btn-danger" style="padding:4px 8px;font-size:12px"><i class="fas fa-trash"></i></button>
+                        <div class="action-dropdown">
+                            <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                            <div class="action-dropdown-menu">
+                                <button onclick="editAccountingEntry('${e.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                <hr class="action-dropdown-divider">
+                                <button onclick="deleteAccountingEntry('${e.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                            </div>
+                        </div>
                     </td>
                 </tr>`).join('');
         }
@@ -1596,8 +1663,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     <td>${escapeHtml(e.description || '')}</td>
                     <td style="text-align:right;color:#dc3545;font-weight:600;">${formatCurrency(convertCurrency(e.amount))}</td>
                     <td style="text-align:center;">
-                        <button onclick="editExpenseEntry('${e.id}')" class="btn-secondary" style="padding:4px 8px;font-size:12px;margin-right:4px"><i class="fas fa-edit"></i></button>
-                        <button onclick="deleteExpenseEntry('${e.id}')" class="btn-danger" style="padding:4px 8px;font-size:12px"><i class="fas fa-trash"></i></button>
+                        <div class="action-dropdown">
+                            <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                            <div class="action-dropdown-menu">
+                                <button onclick="editExpenseEntry('${e.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                <hr class="action-dropdown-divider">
+                                <button onclick="deleteExpenseEntry('${e.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                            </div>
+                        </div>
                     </td>
                 </tr>`).join('');
         }
@@ -1791,15 +1864,19 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                             <span class="supplier-status-badge supplier-status-${String(customer.status || 'Active').toLowerCase()}">${escapeHtml(customer.status || 'Active')}</span>
                                         </td>
                                         <td>
-                                            <div class="supplier-action-group">
-                                                <button onclick="editCustomer('${customer.id}')" class="supplier-action-btn supplier-action-btn--edit">Edit</button>
-                                                <button onclick="printCustomerDetails('${customer.id}')" class="supplier-action-btn">Print</button>
-                                                <button onclick="viewContactHistory('${customer.id}')" class="supplier-action-btn">History</button>
-                                                <button onclick="viewOrderHistory('${customer.id}')" class="supplier-action-btn">Orders</button>
-                                                <button onclick="createInvoiceForCustomer('${customer.id}')" class="supplier-action-btn">Invoice</button>
-                                                <button onclick="sendBulkMessage('${customer.id}')" class="supplier-action-btn">Message</button>
-                                                <button onclick="generateCustomerQR('${customer.id}')" class="supplier-action-btn">QR</button>
-                                                <button onclick="deleteCustomer('${customer.id}')" class="supplier-action-btn supplier-action-btn--delete">Delete</button>
+                                            <div class="action-dropdown">
+                                                <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                                                <div class="action-dropdown-menu">
+                                                    <button onclick="editCustomer('${customer.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                                    <button onclick="printCustomerDetails('${customer.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>
+                                                    <button onclick="viewContactHistory('${customer.id}')" class="action-dropdown-item item-info"><i class="fas fa-history"></i> History</button>
+                                                    <button onclick="viewOrderHistory('${customer.id}')" class="action-dropdown-item item-info"><i class="fas fa-shopping-cart"></i> Orders</button>
+                                                    <button onclick="createInvoiceForCustomer('${customer.id}')" class="action-dropdown-item item-success"><i class="fas fa-file-invoice"></i> Invoice</button>
+                                                    <button onclick="sendBulkMessage('${customer.id}')" class="action-dropdown-item item-success"><i class="fas fa-comment-dots"></i> Message</button>
+                                                    <button onclick="generateCustomerQR('${customer.id}')" class="action-dropdown-item item-warning"><i class="fas fa-qrcode"></i> QR Code</button>
+                                                    <hr class="action-dropdown-divider">
+                                                    <button onclick="deleteCustomer('${customer.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -2181,7 +2258,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                     <th>Name</th>
                                     <th>Phone</th>
                                     <th>Company</th>
-                                    <th>Due Balance</th>
+                                    <th>Due</th>
                                     <th>Status</th>
                                     <th>Action</th>
                                 </tr>
@@ -2201,13 +2278,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                             <span class="supplier-status-badge supplier-status-${String(supplier.status || 'Active').toLowerCase()}">${escapeHtml(supplier.status || 'Active')}</span>
                                         </td>
                                         <td>
-                                            <div class="supplier-action-group">
-                                                <button onclick="editSupplier('${supplier.id}')" class="supplier-action-btn supplier-action-btn--edit">Edit</button>
-                                                <button onclick="addSupplierPurchase('${supplier.id}')" class="supplier-action-btn">Purchase</button>
-                                                <button onclick="paySupplierBill('${supplier.id}')" class="supplier-action-btn">Pay</button>
-                                                <button onclick="viewSupplierReport('${supplier.id}')" class="supplier-action-btn">Report</button>
-                                                <button onclick="viewSupplierPurchaseHistory('${supplier.id}')" class="supplier-action-btn">History</button>
-                                                <button onclick="deleteSupplier('${supplier.id}')" class="supplier-action-btn supplier-action-btn--delete">Delete</button>
+                                            <div class="action-dropdown">
+                                                <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                                                <div class="action-dropdown-menu">
+                                                    <button onclick="editSupplier('${supplier.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                                    <button onclick="addSupplierPurchase('${supplier.id}')" class="action-dropdown-item item-success"><i class="fas fa-shopping-bag"></i> Purchase</button>
+                                                    <button onclick="paySupplierBill('${supplier.id}')" class="action-dropdown-item item-warning"><i class="fas fa-money-bill-wave"></i> Pay Bill</button>
+                                                    <button onclick="viewSupplierReport('${supplier.id}')" class="action-dropdown-item item-info"><i class="fas fa-chart-bar"></i> Report</button>
+                                                    <button onclick="viewSupplierPurchaseHistory('${supplier.id}')" class="action-dropdown-item item-info"><i class="fas fa-history"></i> History</button>
+                                                    <hr class="action-dropdown-divider">
+                                                    <button onclick="deleteSupplier('${supplier.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -4038,12 +4119,18 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                 <td>${inv.dueDate || '-'}</td>
                                 <td>${formatCurrency(convertCurrency(inv.total, inv.currency))}</td>
                                 <td><span class="status ${inv.status}">${inv.status}</span></td>
-                                <td style="display:flex;gap:4px;flex-wrap:wrap;">
-                                    <button onclick="openInvoiceQrForInvoice('${inv.id}')" class="btn-icon" title="${qrEnabled ? 'Show QR code on invoice' : 'VAT/Tax disabled: QR will stay hidden'}" style="${qrEnabled ? 'color: var(--success);' : 'color: var(--text-secondary);'}"><i class="fas fa-qrcode"></i></button>
-                                    <button onclick="editInvoice('${inv.id}')" class="btn-icon" title="Edit"><i class="fas fa-edit"></i></button>
-                                    <button onclick="deleteInvoice('${inv.id}')" class="btn-icon" title="Delete"><i class="fas fa-trash"></i></button>
-                                    <button onclick="printInvoiceById('${inv.id}')" class="btn-icon" title="Print"><i class="fas fa-print"></i></button>
-                                    ${inv.status === 'Paid' ? `<span title='Paid' style='color:var(--success);font-weight:bold;'><i class='fas fa-check-circle'></i></span>` : `<button onclick="markAsPaid('${inv.id}')" class="btn-icon" title="Mark as Paid"><i class="fas fa-check-circle"></i></button>`}
+                                <td style="text-align:center;">
+                                    <div class="action-dropdown">
+                                        <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                                        <div class="action-dropdown-menu">
+                                            <button onclick="editInvoice('${inv.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                            <button onclick="printInvoiceById('${inv.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>
+                                            ${qrEnabled ? `<button onclick="openInvoiceQrForInvoice('${inv.id}')" class="action-dropdown-item item-info"><i class="fas fa-qrcode"></i> QR Code</button>` : ''}
+                                            ${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="markAsPaid('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-check-circle"></i> Mark Paid</button>`}
+                                            <hr class="action-dropdown-divider">
+                                            <button onclick="deleteInvoice('${inv.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                         `).join('')}
@@ -4123,7 +4210,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const qrEnabled = isVatTaxEnabled();
             if (container) {
                 container.innerHTML = `<table class="data-table"><thead><tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-                    ${filtered.map(inv => `<tr><td>${inv.invoiceNo}</td><td>${inv.customerName}</td><td>${inv.date}</td><td>${formatCurrency(convertCurrency(inv.total))}</td><td>${inv.status}</td><td style="display:flex;gap:4px;flex-wrap:wrap;"><button onclick="openInvoiceQrForInvoice('${inv.id}')" class="btn-icon" title="${qrEnabled ? 'Show QR code on invoice' : 'VAT/Tax disabled: QR will stay hidden'}" style="${qrEnabled ? 'color: var(--success);' : 'color: var(--text-secondary);'}"><i class="fas fa-qrcode"></i></button><button onclick="editInvoice('${inv.id}')" class="btn-icon" title="Edit"><i class="fas fa-edit"></i></button></td></tr>`).join('')}
+                    ${filtered.map(inv => `<tr><td>${inv.invoiceNo}</td><td>${inv.customerName}</td><td>${inv.date}</td><td>${formatCurrency(convertCurrency(inv.total))}</td><td>${inv.status}</td><td style="text-align:center;"><div class="action-dropdown"><button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button><div class="action-dropdown-menu"><button onclick="editInvoice('${inv.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button><button onclick="printInvoiceById('${inv.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>${qrEnabled ? `<button onclick="openInvoiceQrForInvoice('${inv.id}')" class="action-dropdown-item item-info"><i class="fas fa-qrcode"></i> QR Code</button>` : ''}${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="markAsPaid('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-check-circle"></i> Mark Paid</button>`}<hr class="action-dropdown-divider"><button onclick="deleteInvoice('${inv.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button></div></div></td></tr>`).join('')}
                 </tbody></table>`;
             }
         }, 250);
@@ -4321,13 +4408,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                         </span>
                                     </td>
                                     <td class="align-center quotation-actions-cell">
-                                        <button onclick="showQuotationForm('${q.id}')" class="quotation-action-btn" title="Edit"><i class="fas fa-edit"></i></button>
-                                        <button onclick="deleteQuotation('${q.id}')" class="quotation-action-btn quotation-action-btn--danger" title="Delete"><i class="fas fa-trash"></i></button>
-                                        <button onclick="printQuotationById('${q.id}')" class="quotation-action-btn" title="Print"><i class="fas fa-print"></i></button>
-                                        <button onclick="toggleQuotationStatus('${q.id}')" class="${toggleClass}" title="${toggleLabel}">
-                                            <i class="fas ${toggleIcon}"></i>
-                                            <span>${toggleLabel}</span>
-                                        </button>
+                                        <div class="action-dropdown">
+                                            <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                                            <div class="action-dropdown-menu">
+                                                <button onclick="showQuotationForm('${q.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                                <button onclick="printQuotationById('${q.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>
+                                                <button onclick="toggleQuotationStatus('${q.id}')" class="action-dropdown-item item-${isInvoiced ? 'warning' : 'success'}"><i class="fas ${isInvoiced ? 'fa-circle' : 'fa-check'}"></i> ${toggleLabel}</button>
+                                                <hr class="action-dropdown-divider">
+                                                <button onclick="deleteQuotation('${q.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                                 `;
@@ -6905,10 +6995,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                                         <td>${escapeHtml(emp.mobile || '-')}</td>
                                         <td>${formatCurrency(convertCurrency(emp.salary || 0))}</td>
                                         <td>
-                                            <div class="supplier-action-group">
-                                                <button onclick="editHREmployee('${emp.id}')" class="supplier-action-btn supplier-action-btn--edit">Edit</button>
-                                                <button onclick="printHREmployee('${emp.id}')" class="supplier-action-btn">Print</button>
-                                                <button onclick="deleteHREmployee('${emp.id}')" class="supplier-action-btn supplier-action-btn--delete">Delete</button>
+                                            <div class="action-dropdown">
+                                                <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                                                <div class="action-dropdown-menu">
+                                                    <button onclick="editHREmployee('${emp.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                                    <button onclick="printHREmployee('${emp.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>
+                                                    <hr class="action-dropdown-divider">
+                                                    <button onclick="deleteHREmployee('${emp.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -7475,10 +7569,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         }
                     </td>
                     <td>
-                        <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                            <button onclick="editProduct('${product.id}')" class="supplier-action-btn supplier-action-btn--edit">Edit</button>
-                            <button onclick="printProduct('${product.id}')" class="supplier-action-btn">Print</button>
-                            <button onclick="deleteProduct('${product.id}')" class="supplier-action-btn supplier-action-btn--delete">Delete</button>
+                        <div class="action-dropdown">
+                            <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                            <div class="action-dropdown-menu">
+                                <button onclick="editProduct('${product.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                <button onclick="printProduct('${product.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>
+                                <hr class="action-dropdown-divider">
+                                <button onclick="deleteProduct('${product.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                            </div>
                         </div>
                     </td>
                 </tr>
