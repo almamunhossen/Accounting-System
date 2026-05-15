@@ -458,6 +458,21 @@
             return `SUP-${getNextSupplierNumericId()}`;
         }
 
+        function getNextExpenseNumericId() {
+            const baseStart = 2000;
+            const maxUsed = expenses.reduce((max, e) => {
+                const match = String(e?.id || '').match(/^EXP-(\d+)$/i);
+                if (!match) return max;
+                const parsed = parseInt(match[1], 10);
+                return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+            }, baseStart);
+            return maxUsed + 1;
+        }
+
+        function generateExpenseCode() {
+            return `EXP-${getNextExpenseNumericId()}`;
+        }
+
         function getNextCustomerNumericId() {
             const baseStart = 2000;
             const maxUsed = customers.reduce((max, customer) => {
@@ -1646,38 +1661,78 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function renderExpenses() {
             const search = (document.getElementById('expenseSearchInput')?.value || '').toLowerCase();
             const filtered = expenses.filter(e =>
+                (e.id || '').toLowerCase().includes(search) ||
                 (e.date || '').toLowerCase().includes(search) ||
                 (e.category || '').toLowerCase().includes(search) ||
                 (e.description || '').toLowerCase().includes(search)
             );
-            const tbody = document.getElementById('expensesTableBody');
-            if (!tbody) return;
+            const container = document.getElementById('expensesListContainer');
+            if (!container) return;
+
             if (!filtered.length) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-secondary)">No expenses found.</td></tr>';
+                container.innerHTML = '<div class="supplier-list-shell"><p class="supplier-empty-state"><i class="fas fa-receipt" style="margin-right:6px;"></i>No expenses found. Click "Add Expense" to record your first expense.</p></div>';
                 return;
             }
-            tbody.innerHTML = filtered.map(e => `
-                <tr>
-                    <td>${escapeHtml(e.date || '')}</td>
-                    <td>${escapeHtml(e.category || '')}</td>
-                    <td>${escapeHtml(e.description || '')}</td>
-                    <td style="text-align:right;color:#dc3545;font-weight:600;">${formatCurrency(convertCurrency(e.amount))}</td>
-                    <td style="text-align:center;">
-                        <div class="action-dropdown">
-                            <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
-                            <div class="action-dropdown-menu">
-                                <button onclick="editExpenseEntry('${e.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
-                                <hr class="action-dropdown-divider">
-                                <button onclick="deleteExpenseEntry('${e.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>`).join('');
+
+            const totalAmount = filtered.reduce((sum, e) => sum + convertCurrency(Number(e.amount || 0)), 0);
+
+            container.innerHTML = `
+                <div class="supplier-list-shell">
+                    <div class="supplier-list-title" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span><i class="fas fa-receipt" style="margin-right:8px;color:var(--accent);"></i>Expense Records</span>
+                        <span style="font-size:13px;font-weight:600;color:#dc3545;">
+                            Total: ${formatCurrency(totalAmount)}
+                        </span>
+                    </div>
+                    <div class="supplier-table-wrap">
+                        <table class="supplier-table">
+                            <thead>
+                                <tr>
+                                    <th>Expense ID</th>
+                                    <th>Description</th>
+                                    <th>Category</th>
+                                    <th>Date</th>
+                                    <th style="text-align:right;">Amount</th>
+                                    <th style="text-align:center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filtered.map(e => `
+                                    <tr>
+                                        <td class="supplier-id-cell">${escapeHtml(e.id || '-')}</td>
+                                        <td>
+                                            <div class="supplier-primary-text">${escapeHtml(e.description || '-')}</div>
+                                        </td>
+                                        <td>
+                                            <span class="supplier-status-badge" style="background:rgba(74,144,226,0.12);color:var(--accent);border:1px solid rgba(74,144,226,0.25);">${escapeHtml(e.category || 'General')}</span>
+                                        </td>
+                                        <td>${escapeHtml(e.date || '-')}</td>
+                                        <td style="text-align:right;">
+                                            <span style="font-weight:700;color:#dc3545;">${formatCurrency(convertCurrency(e.amount))}</span>
+                                        </td>
+                                        <td style="text-align:center;">
+                                            <div class="action-dropdown">
+                                                <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
+                                                <div class="action-dropdown-menu">
+                                                    <button onclick="editExpenseEntry('${e.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                                    <hr class="action-dropdown-divider">
+                                                    <button onclick="deleteExpenseEntry('${e.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         }
 
         function showAddExpenseModal() {
             currentExpenseId = null;
             document.getElementById('expenseModalTitle').textContent = 'Add Expense';
+            document.getElementById('expenseIdDisplay').value = generateExpenseCode();
             document.getElementById('expenseDate').value = new Date().toISOString().slice(0, 10);
             document.getElementById('expenseCategory').value = 'General';
             document.getElementById('expenseDescription').value = '';
@@ -1694,6 +1749,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (!entry) return;
             currentExpenseId = id;
             document.getElementById('expenseModalTitle').textContent = 'Edit Expense';
+            document.getElementById('expenseIdDisplay').value = entry.id || id;
             document.getElementById('expenseDate').value = entry.date || '';
             document.getElementById('expenseCategory').value = entry.category || 'General';
             document.getElementById('expenseDescription').value = entry.description || '';
@@ -1703,7 +1759,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         async function saveExpenseEntry() {
             const entry = {
-                id: currentExpenseId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: currentExpenseId || document.getElementById('expenseIdDisplay').value || generateExpenseCode(),
                 date: document.getElementById('expenseDate').value,
                 category: document.getElementById('expenseCategory').value || 'General',
                 description: document.getElementById('expenseDescription').value.trim(),

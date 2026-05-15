@@ -412,30 +412,18 @@
             <!-- Expenses View -->
             <div id="expensesView" class="view" style="display:none;">
                 <div class="view-header" style="display:flex;justify-content:space-between;margin-bottom:20px;align-items:center;">
-                    <h1><i class="fas fa-receipt"></i> Expenses</h1>
+                    <div>
+                        <h1><i class="fas fa-receipt"></i> Expenses</h1>
+                        <p style="color:var(--text-secondary);margin-top:5px;font-size:14px;">Track and manage all business expenses</p>
+                    </div>
                     <button onclick="showAddExpenseModal()" class="btn-primary">
                         <i class="fas fa-plus"></i> Add Expense
                     </button>
                 </div>
-                <div class="search-bar" style="margin-bottom:16px;">
-                    <input type="text" id="expenseSearchInput" placeholder="Search by date, category or description..." onkeyup="renderExpenses()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color);">
+                <div class="form-section" style="margin-bottom:16px;">
+                    <input type="text" id="expenseSearchInput" placeholder="Search by ID, description, category or date..." onkeyup="renderExpenses()" style="width:100%;padding:10px 15px;border-radius:10px;border:1px solid var(--border-color);background:var(--card-bg);color:var(--text-primary);font-size:14px;">
                 </div>
-                <div style="overflow-x:auto;">
-                    <table style="width:100%;border-collapse:collapse;background:var(--card-bg);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
-                        <thead>
-                            <tr style="background:var(--primary);color:#fff;">
-                                <th style="padding:12px 16px;text-align:left;">Date</th>
-                                <th style="padding:12px 16px;text-align:left;">Category</th>
-                                <th style="padding:12px 16px;text-align:left;">Description</th>
-                                <th style="padding:12px 16px;text-align:right;">Amount</th>
-                                <th style="padding:12px 16px;text-align:center;">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="expensesTableBody">
-                            <tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-secondary)">No expenses found.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <div id="expensesListContainer"></div>
             </div>
 
             <!-- Products View -->
@@ -1830,8 +1818,12 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>Date</label>
-                    <input type="date" id="expenseDate" class="form-control" required>
+                    <label>Expense ID</label>
+                    <input type="text" id="expenseIdDisplay" class="form-control" readonly style="background:var(--bg-primary);font-weight:600;color:var(--accent);letter-spacing:0.5px;">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="expenseDescription" class="form-control" placeholder="e.g. Office rent, Staff salary...">
                 </div>
                 <div class="form-group">
                     <label>Category</label>
@@ -1847,8 +1839,8 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Description</label>
-                    <input type="text" id="expenseDescription" class="form-control" placeholder="e.g. Office rent, Staff salary...">
+                    <label>Date</label>
+                    <input type="date" id="expenseDate" class="form-control" required>
                 </div>
                 <div class="form-group">
                     <label>Amount</label>
