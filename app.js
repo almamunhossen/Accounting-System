@@ -6131,7 +6131,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
         function openGoogleSheets() {
             const settings = readStoredJson('pro_invoice_settings', {});
-            const defaultSheetsUrl = 'https://docs.google.com/spreadsheets/d/1okpAP9AlmmKai3jn5SfjzGuuLcW1eS4vAbMZSjyD5u0/edit';
+            const defaultSheetsUrl = 'https://docs.google.com/spreadsheets/d/17wXBjzJOfYpvqxnGerjnrCnsMQZBPS_xMv76tRsHcxA/edit';
             const url = settings.googleSheetsUrl || defaultSheetsUrl;
             window.open(url, '_blank', 'noopener,noreferrer');
         }
