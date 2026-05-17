@@ -3211,6 +3211,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (invoiceDatalist) {
                 invoiceDatalist.innerHTML = savedProducts.map(product => `<option value="${escapeHtml(product.name)}"></option>`).join('');
             }
+            // Update Quotation Form datalist
+            const quotationDatalist = document.getElementById('quotationProductsDatalist');
+            if (quotationDatalist) {
+                quotationDatalist.innerHTML = savedProducts.map(product => `<option value="${escapeHtml(product.name)}"></option>`).join('');
+            }
         }
 
         function addItemInput(data = {}) {
@@ -3371,7 +3376,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             return items;
         }
 
-        function addQuotationItemInput() {
+        function addQuotationItemInput(data = {}) {
             const container = document.getElementById('quotationItemsInputContainer');
             const itemDiv = document.createElement('div');
             itemDiv.className = 'item-row quotation-item-row';
@@ -3381,14 +3386,31 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             itemDiv.style.marginBottom = '10px';
             itemDiv.id = `quotation-item-row-${quotationItemCounter}`;
             itemDiv.innerHTML = `
-                <input type="text" placeholder="Item Name" class="item-name" oninput="updateQuotationTotals()">
-                <input type="number" placeholder="Qty" class="item-qty" value="1" step="0.01" oninput="updateQuotationTotals()">
-                <input type="number" placeholder="Price" class="item-price" value="0" step="0.01" oninput="updateQuotationTotals()">
-                <input type="number" placeholder="Discount %" class="item-discount" value="0" step="0.1" oninput="updateQuotationTotals()">
-                <button onclick="removeQuotationItemInput(${quotationItemCounter})" class="btn-icon"><i class="fas fa-trash"></i></button>
+                <input list="quotationProductsDatalist" type="text" placeholder="Item Name / select from Products" class="item-name" value="${escapeHtml(data.name || '')}">
+                <input type="number" placeholder="Qty" class="item-qty" value="${data.quantity || 1}" step="0.01" oninput="updateQuotationTotals()">
+                <input type="number" placeholder="Price" class="item-price" value="${data.price || 0}" step="0.01" oninput="updateQuotationTotals()">
+                <input type="number" placeholder="Discount %" class="item-discount" value="${data.discount || 0}" step="0.1" oninput="updateQuotationTotals()">
+                <button type="button" onclick="removeQuotationItemInput(${quotationItemCounter})" class="btn-icon"><i class="fas fa-trash"></i></button>
             `;
             container.appendChild(itemDiv);
+
+            // Auto-fill price when a product is selected from the datalist
+            const nameInput = itemDiv.querySelector('.item-name');
+            nameInput.addEventListener('input', function () {
+                fillQuotationProductData(itemDiv, this.value);
+                updateQuotationTotals();
+            });
+
             quotationItemCounter++;
+            updateQuotationTotals();
+        }
+
+        function fillQuotationProductData(row, name) {
+            const product = savedProducts.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+            if (!product) return;
+            const priceInput = row.querySelector('.item-price');
+            if (priceInput) priceInput.value = product.price || 0;
+            updateQuotationTotals();
         }
 
         function removeQuotationItemInput(id) {
@@ -4554,15 +4576,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     document.getElementById('quotationCustomerSelect').value = quotation.customerName;
                     if (quotation.items && quotation.items.length) {
                         quotation.items.forEach(item => {
-                            addQuotationItemInput();
-                            const rows = itemsContainer.querySelectorAll('.quotation-item-row');
-                            const lastRow = rows[rows.length - 1];
-                            if (lastRow) {
-                                lastRow.querySelector('.item-name').value = item.name || '';
-                                lastRow.querySelector('.item-qty').value = item.quantity || 1;
-                                lastRow.querySelector('.item-price').value = item.price || 0;
-                                lastRow.querySelector('.item-discount').value = item.discount || 0;
-                            }
+                            addQuotationItemInput(item);
                         });
                     } else {
                         addQuotationItemInput();
