@@ -1212,6 +1212,18 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 status: row.status || 'Unpaid',
                 currency: row.currency || 'SAR'
             }));
+
+            // Auto-increment: derive nextInvoiceNumber from the highest INV-XXXX stored in Google Sheets
+            const maxInvUsed = invoices.reduce((max, inv) => {
+                const match = String(inv.invoiceNo || '').match(/^INV-(\d+)$/i);
+                if (!match) return max;
+                const parsed = parseInt(match[1], 10);
+                return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+            }, 2000);
+            if (maxInvUsed + 1 > nextInvoiceNumber) {
+                nextInvoiceNumber = maxInvUsed + 1;
+                generateInvoiceNumber();
+            }
         }
 
         async function syncSupplierPurchasesFromApi() {
