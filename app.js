@@ -3243,7 +3243,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     <td class="px-4 py-3 w-32">
                         <input type="number" min="0" step="0.01" class="product-price w-full rounded-2xl px-3 py-2 text-sm invoice-item-input" value="${data.price || 0}">
                     </td>
-                    <td class="px-4 py-3 w-32 text-right font-semibold invoice-item-total product-total">${formatCurrency(convertCurrency(0))}</td>
+                    <td class="px-4 py-3 w-32">
+                        <input type="number" min="0" step="0.01" class="product-total w-full rounded-2xl px-3 py-2 text-sm invoice-item-input" value="0" placeholder="Total">
+                    </td>
                     <td class="px-4 py-3 w-24 text-center">
                         <button type="button" onclick="removeItemInput(${rowId})" class="invoice-item-delete inline-flex h-11 w-11 items-center justify-center rounded-2xl" title="Delete Item">
                             <i class="fas fa-trash"></i>
@@ -3259,13 +3261,21 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 const inputs = row.querySelectorAll('input, select');
                 inputs.forEach(input => {
                     input.addEventListener('input', () => {
-                        if (input.classList.contains('product-name')) {
-                            fillProductData(row, input.value);
+                        if (input.classList.contains('product-total')) {
+                            backCalculateUnitPrice(row);
+                        } else {
+                            if (input.classList.contains('product-name')) {
+                                fillProductData(row, input.value);
+                            }
+                            updateProductRow(row);
                         }
-                        updateProductRow(row);
                     });
                     input.addEventListener('change', () => {
-                        updateProductRow(row);
+                        if (input.classList.contains('product-total')) {
+                            backCalculateUnitPrice(row);
+                        } else {
+                            updateProductRow(row);
+                        }
                     });
                 });
                 
@@ -3285,6 +3295,25 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             row.querySelector('.product-price').value = product.price || 0;
             row.dataset.vatIncluded = product.vatIncluded ? 'true' : 'false';
             row.dataset.productTax = product.tax || 0;
+        }
+
+        // ===== BIDIRECTIONAL TOTAL / UNIT PRICE CALCULATION =====
+        let _backCalcRow = null;
+        function backCalculateUnitPrice(row) {
+            const totalInput = row.querySelector('.product-total');
+            if (!totalInput) return;
+            const total = parseFloat(totalInput.value) || 0;
+            const qty = parseFloat(row.querySelector('.product-quantity')?.value) || 1;
+            const discountRate = validateNumber(document.getElementById('discountInput')?.value);
+            const vatRate = validateNumber(document.getElementById('vatRateInput')?.value);
+            // Reverse of: total = qty * price * (1 - discount/100) * (1 + vat/100)
+            const divisor = qty * (1 - discountRate / 100) * (1 + vatRate / 100);
+            const price = divisor > 0 ? total / divisor : 0;
+            const priceInput = row.querySelector('.product-price');
+            if (priceInput) priceInput.value = Math.round(price * 10000) / 10000;
+            _backCalcRow = row;
+            updateTotals();
+            _backCalcRow = null;
         }
 
         function validateNumber(value) {
@@ -3339,7 +3368,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const amounts = calculateLineAmounts(item, getInvoiceRateOptions());
             const totalCell = row.querySelector('.product-total');
             if (totalCell) {
-                totalCell.innerHTML = formatCurrency(convertCurrency(amounts.total));
+                totalCell.value = amounts.total.toFixed(2);
             }
             updateTotals();
         }
@@ -3381,7 +3410,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const itemDiv = document.createElement('div');
             itemDiv.className = 'item-row quotation-item-row';
             itemDiv.style.display = 'grid';
-            itemDiv.style.gridTemplateColumns = '2fr 1fr 1fr 1fr auto';
+            itemDiv.style.gridTemplateColumns = '2fr 1fr 1fr 1fr 1fr auto';
             itemDiv.style.gap = '10px';
             itemDiv.style.marginBottom = '10px';
             itemDiv.id = `quotation-item-row-${quotationItemCounter}`;
@@ -3390,6 +3419,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 <input type="number" placeholder="Qty" class="item-qty" value="${data.quantity || 1}" step="0.01" oninput="updateQuotationTotals()">
                 <input type="number" placeholder="Price" class="item-price" value="${data.price || 0}" step="0.01" oninput="updateQuotationTotals()">
                 <input type="number" placeholder="Discount %" class="item-discount" value="${data.discount || 0}" step="0.1" oninput="updateQuotationTotals()">
+                <input type="number" placeholder="Total" class="item-total" value="0" step="0.01">
                 <button type="button" onclick="removeQuotationItemInput(${quotationItemCounter})" class="btn-icon"><i class="fas fa-trash"></i></button>
             `;
             container.appendChild(itemDiv);
@@ -3401,8 +3431,31 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 updateQuotationTotals();
             });
 
+            // Back-calculate unit price when total is directly edited
+            const totalInput = itemDiv.querySelector('.item-total');
+            totalInput.addEventListener('input', function () {
+                backCalculateQuotationUnitPrice(itemDiv);
+            });
+
             quotationItemCounter++;
             updateQuotationTotals();
+        }
+
+        let _backCalcQuotRow = null;
+        function backCalculateQuotationUnitPrice(row) {
+            const totalInput = row.querySelector('.item-total');
+            if (!totalInput) return;
+            const total = parseFloat(totalInput.value) || 0;
+            const qty = parseFloat(row.querySelector('.item-qty')?.value) || 1;
+            const discount = parseFloat(row.querySelector('.item-discount')?.value) || 0;
+            // Reverse of: total = qty * price * (1 - discount/100)
+            const divisor = qty * (1 - discount / 100);
+            const price = divisor > 0 ? total / divisor : 0;
+            const priceInput = row.querySelector('.item-price');
+            if (priceInput) priceInput.value = Math.round(price * 10000) / 10000;
+            _backCalcQuotRow = row;
+            updateQuotationTotals();
+            _backCalcQuotRow = null;
         }
 
         function fillQuotationProductData(row, name) {
@@ -3438,6 +3491,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function updateQuotationTotals() {
             const items = getQuotationItemsFromInputs();
             const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.price * (1 - item.discount / 100)), 0);
+            // Update per-row total inputs
+            document.querySelectorAll('.quotation-item-row').forEach(function(row) {
+                if (row === _backCalcQuotRow) return;
+                const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
+                const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+                const discount = parseFloat(row.querySelector('.item-discount')?.value) || 0;
+                const rowTotal = qty * price * (1 - discount / 100);
+                const ti = row.querySelector('.item-total');
+                if (ti) ti.value = rowTotal.toFixed(2);
+            });
             window.currentQuotationSubtotal = subtotal;
             window.currentQuotationTotal = subtotal;
             updateQuotationPreview();
@@ -3455,8 +3518,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             items.forEach((item, index) => {
                 const amounts = calculateLineAmounts(item, rateOptions);
                 const totalCell = rows[index]?.querySelector('.product-total');
-                if (totalCell) {
-                    totalCell.innerHTML = formatCurrency(convertCurrency(amounts.total));
+                if (totalCell && rows[index] !== _backCalcRow) {
+                    totalCell.value = amounts.total.toFixed(2);
                 }
                 subtotal += amounts.subtotal;
                 discountTotal += amounts.discountAmount;

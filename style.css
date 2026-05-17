@@ -1376,7 +1376,7 @@
 
         .item-row-header {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr auto;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
             gap: 10px;
             margin-bottom: 12px;
             font-weight: 700;
