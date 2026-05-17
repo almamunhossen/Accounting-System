@@ -72,6 +72,7 @@
         function toggleActionDropdown(btn, event) {
             if (event) event.stopPropagation();
             const menu = btn.nextElementSibling;
+            if (!menu || !menu.classList.contains('action-dropdown-menu')) return;
             const isOpen = menu.classList.contains('open');
 
             // Close all open dropdowns first
