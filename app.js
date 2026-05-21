@@ -1608,11 +1608,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const totalIncome  = accountingEntries.reduce((s, e) => s + (parseFloat(e.income)  || 0), 0);
             const totalExpense = accountingEntries.reduce((s, e) => s + (parseFloat(e.expense) || 0), 0);
             const netBalance   = totalIncome - totalExpense;
-            const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-            setKpi('accKpiIncome',  formatCurrency(totalIncome));
-            setKpi('accKpiExpense', formatCurrency(totalExpense));
-            setKpi('accKpiBalance', formatCurrency(netBalance));
-            setKpi('accKpiEntries', accountingEntries.length);
+            const setKpi = (id, val, isHtml) => { const el = document.getElementById(id); if (el) { if (isHtml) el.innerHTML = val; else el.textContent = val; } };
+            setKpi('accKpiIncome',  formatCurrency(totalIncome),  true);
+            setKpi('accKpiExpense', formatCurrency(totalExpense), true);
+            setKpi('accKpiBalance', formatCurrency(netBalance),   true);
+            setKpi('accKpiEntries', accountingEntries.length,     false);
             const balEl = document.getElementById('accKpiBalance');
             if (balEl) {
                 balEl.className = netBalance >= 0 ? 'acc-kpi-pos' : 'acc-kpi-neg';
