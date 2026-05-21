@@ -6715,6 +6715,92 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
         });
 
+        // ===== Draggable Floating Controls =====
+        (function () {
+            const el  = document.getElementById('floatingControls');
+            const btn = document.getElementById('floatingToggleBtn');
+            if (!el || !btn) return;
+
+            // Restore saved position
+            try {
+                const saved = JSON.parse(localStorage.getItem('floatingControlsPos'));
+                if (saved && typeof saved.top === 'number' && typeof saved.left === 'number') {
+                    el.style.bottom = 'auto';
+                    el.style.right  = 'auto';
+                    el.style.top    = Math.max(0, Math.min(saved.top,  window.innerHeight - 60)) + 'px';
+                    el.style.left   = Math.max(0, Math.min(saved.left, window.innerWidth  - 60)) + 'px';
+                }
+            } catch (e) { /* ignore */ }
+
+            const DRAG_THRESHOLD = 5;
+            let isDragging = false, moved = false;
+            let startX, startY, startLeft, startTop;
+
+            function beginDrag(clientX, clientY) {
+                const rect = el.getBoundingClientRect();
+                startX    = clientX;
+                startY    = clientY;
+                startLeft = rect.left;
+                startTop  = rect.top;
+                moved     = false;
+                isDragging = true;
+                document.body.style.userSelect = 'none';
+            }
+
+            function moveDrag(clientX, clientY) {
+                if (!isDragging) return;
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+                if (!moved && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+                    moved = true;
+                    btn.classList.add('dragging');
+                }
+                if (!moved) return;
+                let newLeft = Math.max(0, Math.min(startLeft + dx, window.innerWidth  - el.offsetWidth));
+                let newTop  = Math.max(0, Math.min(startTop  + dy, window.innerHeight - el.offsetHeight));
+                el.style.bottom = 'auto';
+                el.style.right  = 'auto';
+                el.style.left   = newLeft + 'px';
+                el.style.top    = newTop  + 'px';
+            }
+
+            function endDrag() {
+                if (!isDragging) return;
+                isDragging = false;
+                btn.classList.remove('dragging');
+                document.body.style.userSelect = '';
+                if (moved) {
+                    const rect = el.getBoundingClientRect();
+                    try { localStorage.setItem('floatingControlsPos', JSON.stringify({ top: rect.top, left: rect.left })); } catch (e) { /* ignore */ }
+                }
+            }
+
+            // Mouse
+            btn.addEventListener('mousedown', function (e) { if (e.button === 0) beginDrag(e.clientX, e.clientY); });
+            document.addEventListener('mousemove', function (e) { moveDrag(e.clientX, e.clientY); });
+            document.addEventListener('mouseup',   endDrag);
+
+            // Touch
+            btn.addEventListener('touchstart', function (e) {
+                const t = e.touches[0];
+                beginDrag(t.clientX, t.clientY);
+            }, { passive: true });
+            document.addEventListener('touchmove', function (e) {
+                if (!isDragging) return;
+                const t = e.touches[0];
+                const dx = t.clientX - startX, dy = t.clientY - startY;
+                if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) e.preventDefault();
+                moveDrag(t.clientX, t.clientY);
+            }, { passive: false });
+            document.addEventListener('touchend', endDrag);
+
+            // Block click after drag to avoid toggling panel
+            btn.addEventListener('click', function (e) {
+                if (moved) { e.stopImmediatePropagation(); moved = false; }
+            }, true);
+        })();
+        // ===== END Draggable Floating Controls =====
+
         // ==================== UTILITIES ====================
         function createNewInvoice() {
             try {
