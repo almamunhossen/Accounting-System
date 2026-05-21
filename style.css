@@ -320,6 +320,217 @@
         }
         /* ===== END SELECT & SEARCH DARK MODE ===== */
 
+        /* =============================================
+           ACCOUNTING TAB — PRO STYLES
+        ============================================= */
+
+        /* KPI Grid */
+        .acc-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 18px;
+            margin-bottom: 26px;
+        }
+
+        .acc-kpi-card {
+            background: var(--card-bg);
+            border-radius: 18px;
+            padding: 20px 22px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+            border: 1px solid rgba(74,144,226,0.08);
+            transition: transform 0.18s, box-shadow 0.18s;
+        }
+        .acc-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,0,0,0.1); }
+
+        .acc-kpi-icon {
+            width: 48px; height: 48px;
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .acc-kpi-income  .acc-kpi-icon { background: rgba(40,167,69,0.12); color: #28a745; }
+        .acc-kpi-expense .acc-kpi-icon { background: rgba(220,53,69,0.12); color: #dc3545; }
+        .acc-kpi-balance .acc-kpi-icon { background: rgba(74,144,226,0.12); color: var(--accent); }
+        .acc-kpi-entries .acc-kpi-icon { background: rgba(255,193,7,0.12); color: #e6a800; }
+
+        .acc-kpi-body span {
+            display: block;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .acc-kpi-body strong {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        strong.acc-kpi-pos { color: #28a745 !important; }
+        strong.acc-kpi-neg { color: #dc3545 !important; }
+
+        /* Toolbar */
+        .acc-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .acc-toolbar-left {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .acc-toolbar-icon { font-size: 18px; color: var(--accent); }
+        .acc-toolbar-title { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+
+        .acc-result-badge {
+            background: rgba(74,144,226,0.12);
+            color: var(--accent);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+
+        .acc-toolbar-right {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        }
+
+        .acc-search-wrap {
+            position: relative;
+        }
+        .acc-search-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            color: var(--text-secondary); font-size: 13px; pointer-events: none;
+        }
+        .acc-search-input {
+            background: var(--card-bg);
+            border: 1.5px solid var(--border-color);
+            border-radius: 12px;
+            padding: 9px 14px 9px 34px;
+            font-size: 13px;
+            color: var(--text-primary);
+            width: 230px;
+            outline: none;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .acc-search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(74,144,226,0.15);
+        }
+
+        .acc-export-btn { display: flex; align-items: center; gap: 6px; }
+
+        /* Table Card */
+        .acc-table-card {
+            background: var(--card-bg);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .acc-table-scroll { overflow-x: auto; }
+
+        .acc-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .acc-table thead tr {
+            background: linear-gradient(135deg, var(--accent) 0%, #357abd 100%);
+        }
+        .acc-table thead th {
+            padding: 14px 18px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            white-space: nowrap;
+        }
+        .acc-table thead th.text-right  { text-align: right; }
+        .acc-table thead th.text-center { text-align: center; }
+
+        .acc-table tbody tr {
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.12s;
+        }
+        .acc-table tbody tr:last-child { border-bottom: none; }
+        .acc-table tbody tr:hover { background: rgba(74,144,226,0.04); }
+
+        .acc-table tbody tr.acc-row-income  { border-left: 3px solid rgba(40,167,69,0.4); }
+        .acc-table tbody tr.acc-row-expense { border-left: 3px solid rgba(220,53,69,0.4); }
+
+        .acc-table td {
+            padding: 13px 18px;
+            font-size: 14px;
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .acc-table td.text-right  { text-align: right; }
+        .acc-table td.text-center { text-align: center; }
+
+        .acc-row-num  { color: var(--text-secondary); font-size: 12px; width: 42px; }
+        .acc-date-cell { white-space: nowrap; color: var(--text-secondary); font-size: 13px; }
+        .acc-date-icon { margin-right: 6px; color: var(--accent); font-size: 11px; }
+        .acc-desc-cell { max-width: 280px; }
+
+        /* Chips */
+        .acc-chip {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .acc-chip-income  { background: rgba(40,167,69,0.12); color: #28a745; }
+        .acc-chip-expense { background: rgba(220,53,69,0.12); color: #dc3545; }
+        .acc-chip-nil     { color: var(--text-secondary); font-size: 13px; }
+
+        .acc-balance-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .acc-balance-badge.acc-bal-pos { background: rgba(40,167,69,0.1); color: #1e8c3a; }
+        .acc-balance-badge.acc-bal-neg { background: rgba(220,53,69,0.1); color: #c0392b; }
+
+        /* Empty state */
+        .acc-empty-state {
+            text-align: center;
+            padding: 52px 20px !important;
+            color: var(--text-secondary) !important;
+            font-size: 15px;
+            line-height: 2;
+        }
+
+        /* Dark mode tweaks */
+        body.dark-mode .acc-kpi-card {
+            border-color: rgba(255,255,255,0.06);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+        body.dark-mode .acc-search-input {
+            background: var(--bg-secondary);
+        }
+        body.dark-mode .acc-table-card {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        }
+        body.dark-mode .acc-balance-badge.acc-bal-pos { color: #4cde79; background: rgba(40,167,69,0.18); }
+        body.dark-mode .acc-balance-badge.acc-bal-neg { color: #f07080; background: rgba(220,53,69,0.18); }
+        body.dark-mode .acc-chip-income  { color: #4cde79; background: rgba(40,167,69,0.18); }
+        body.dark-mode .acc-chip-expense { color: #f07080; background: rgba(220,53,69,0.18); }
+        body.dark-mode strong.acc-kpi-pos { color: #4cde79 !important; }
+        body.dark-mode strong.acc-kpi-neg { color: #f07080 !important; }
+
+        /* ===== END ACCOUNTING TAB ===== */
+
         /* ===== READONLY INPUTS & MODAL HELPERS — DARK MODE ===== */
 
         /* All readonly inputs — disabled-looking but dark-mode aware */
@@ -892,6 +1103,121 @@
         #reportsView canvas {
             width: 100% !important;
             max-height: 320px;
+        }
+
+        /* ===== REPORT TABS ===== */
+        .report-tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            background: var(--card-bg);
+            border-radius: 18px;
+            padding: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .report-tab-btn {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 9px 16px;
+            border-radius: 12px;
+            border: 1.5px solid transparent;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            white-space: nowrap;
+        }
+
+        .report-tab-btn:hover {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .report-tab-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            box-shadow: 0 4px 12px rgba(74,144,226,0.3);
+        }
+
+        .report-tab-pane {
+            display: none;
+        }
+
+        .report-tab-pane.active {
+            display: block;
+        }
+
+        /* P&L / Balance Sheet statement styles */
+        .pl-statement, .bs-statement {
+            background: var(--card-bg);
+            border-radius: 18px;
+            padding: 28px 32px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+            margin-bottom: 24px;
+        }
+
+        .pl-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            margin: 20px 0 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .pl-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .pl-row:hover { background: var(--bg-primary); }
+
+        .pl-row.indent { padding-left: 28px; color: var(--text-secondary); }
+
+        .pl-row.subtotal {
+            font-weight: 600;
+            background: rgba(74,144,226,0.07);
+            border-radius: 10px;
+            margin-top: 4px;
+        }
+
+        .pl-row.total {
+            font-weight: 700;
+            font-size: 16px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 12px;
+            margin-top: 10px;
+        }
+
+        .pl-row.profit { background: rgba(40,167,69,0.1); color: #1a7c34; font-weight: 600; }
+        .pl-row.loss   { background: rgba(220,53,69,0.1);  color: #b02030; font-weight: 600; }
+
+        body.dark-mode .pl-row.profit { color: #4cde79; }
+        body.dark-mode .pl-row.loss   { color: #f07080; }
+
+        .bs-col-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 640px) {
+            .bs-col-grid { grid-template-columns: 1fr; }
+            .report-tab-btn { font-size: 12px; padding: 8px 12px; }
         }
 
         .chart-card {

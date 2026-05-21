@@ -1584,15 +1584,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         let currentAccountingId = null;
 
         function showAccounting() {
+            // Accounting is now a tab inside Reports
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            const view = document.getElementById('accountingView');
-            if (view) view.style.display = 'block';
-            const btn = document.getElementById('navAccounting');
-            if (btn) btn.classList.add('active');
+            document.getElementById('reportsView').style.display = 'block';
+            setActiveNav('navReports');
             const title = document.getElementById('mobilePageTitle');
-            if (title) title.textContent = 'Accounting';
-            renderAccounting();
+            if (title) title.textContent = 'Reports';
+            if (!latestReportStats) {
+                const stats = calculateStats(getActiveReportFilters());
+                latestReportStats = stats;
+            }
+            switchReportTab('accounting');
         }
 
         function renderAccounting() {
@@ -1601,20 +1603,46 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 (e.date || '').toLowerCase().includes(search) ||
                 (e.description || '').toLowerCase().includes(search)
             );
+
+            // --- KPI cards ---
+            const totalIncome  = accountingEntries.reduce((s, e) => s + (parseFloat(e.income)  || 0), 0);
+            const totalExpense = accountingEntries.reduce((s, e) => s + (parseFloat(e.expense) || 0), 0);
+            const netBalance   = totalIncome - totalExpense;
+            const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+            setKpi('accKpiIncome',  formatCurrency(totalIncome));
+            setKpi('accKpiExpense', formatCurrency(totalExpense));
+            setKpi('accKpiBalance', formatCurrency(netBalance));
+            setKpi('accKpiEntries', accountingEntries.length);
+            const balEl = document.getElementById('accKpiBalance');
+            if (balEl) {
+                balEl.className = netBalance >= 0 ? 'acc-kpi-pos' : 'acc-kpi-neg';
+            }
+
+            // --- Result count badge ---
+            const badge = document.getElementById('accResultCount');
+            if (badge) badge.textContent = search ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''}` : '';
+
             const tbody = document.getElementById('accountingTableBody');
             if (!tbody) return;
             if (!filtered.length) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-secondary)">No accounting entries found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="acc-empty-state"><i class="fas fa-book-open"></i><br>No accounting entries found.</td></tr>';
                 return;
             }
-            tbody.innerHTML = filtered.map(e => `
-                <tr>
-                    <td>${e.date || ''}</td>
-                    <td>${e.description || ''}</td>
-                    <td style="color:#28a745">${formatCurrency(e.income)}</td>
-                    <td style="color:#dc3545">${formatCurrency(e.expense)}</td>
-                    <td style="font-weight:600">${formatCurrency(e.balance)}</td>
-                    <td>
+            tbody.innerHTML = filtered.map((e, i) => {
+                const inc = parseFloat(e.income) || 0;
+                const exp = parseFloat(e.expense) || 0;
+                const bal = parseFloat(e.balance) || 0;
+                const rowClass = inc > 0 && exp === 0 ? 'acc-row-income' : exp > 0 && inc === 0 ? 'acc-row-expense' : '';
+                const balClass = bal >= 0 ? 'acc-bal-pos' : 'acc-bal-neg';
+                return `
+                <tr class="${rowClass}">
+                    <td class="acc-row-num">${i + 1}</td>
+                    <td class="acc-date-cell"><i class="fas fa-calendar-days acc-date-icon"></i>${e.date || '—'}</td>
+                    <td class="acc-desc-cell">${e.description || '—'}</td>
+                    <td class="text-right acc-income-cell">${inc > 0 ? `<span class="acc-chip acc-chip-income">${formatCurrency(inc)}</span>` : '<span class="acc-chip-nil">—</span>'}</td>
+                    <td class="text-right acc-expense-cell">${exp > 0 ? `<span class="acc-chip acc-chip-expense">${formatCurrency(exp)}</span>` : '<span class="acc-chip-nil">—</span>'}</td>
+                    <td class="text-right"><span class="acc-balance-badge ${balClass}">${formatCurrency(bal)}</span></td>
+                    <td class="text-center">
                         <div class="action-dropdown">
                             <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
                             <div class="action-dropdown-menu">
@@ -1624,7 +1652,28 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             </div>
                         </div>
                     </td>
-                </tr>`).join('');
+                </tr>`;
+            }).join('');
+        }
+
+        function exportAccountingCSV() {
+            if (!accountingEntries.length) { alert('No accounting entries to export.'); return; }
+            const headers = ['#','Date','Description','Income','Expense','Balance'];
+            const rows = accountingEntries.map((e, i) => [
+                i + 1,
+                e.date || '',
+                '"' + (e.description || '').replace(/"/g, '""') + '"',
+                e.income  || 0,
+                e.expense || 0,
+                e.balance || 0
+            ]);
+            const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'accounting_ledger.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
         }
 
         function showAddAccountingModal() {
@@ -4988,7 +5037,442 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             renderReportOverview(stats);
             renderReportTables(stats);
             renderCharts(stats);
+            // Re-render active specialised tab if open
+            renderActiveReportTab(stats);
         }
+
+        // ==================== REPORT TABS ====================
+        var activeReportTab = 'overview';
+        var reportTabCharts = {};
+
+        function switchReportTab(tab) {
+            activeReportTab = tab;
+            // update button states
+            document.querySelectorAll('.report-tab-btn').forEach(function(btn) {
+                btn.classList.toggle('active', btn.id === 'rtab-' + tab);
+            });
+            // show/hide panes — use explicit map to avoid capitalisation mismatch
+            var tabPaneIds = {
+                overview:    'reportTabOverview',
+                daily:       'reportTabDaily',
+                monthly:     'reportTabMonthly',
+                profit:      'reportTabProfit',
+                expense:     'reportTabExpense',
+                pl:          'reportTabPL',
+                bs:          'reportTabBS',
+                accounting:  'reportTabAccounting'
+            };
+            Object.keys(tabPaneIds).forEach(function(t) {
+                var el = document.getElementById(tabPaneIds[t]);
+                if (el) el.classList.toggle('active', t === tab);
+            });
+            // render the selected tab with latest stats
+            var stats = latestReportStats;
+            if (!stats) { stats = calculateStats(getActiveReportFilters()); latestReportStats = stats; }
+            renderActiveReportTab(stats);
+        }
+
+        function renderActiveReportTab(stats) {
+            if (!stats) return;
+            switch (activeReportTab) {
+                case 'daily':   renderDailyReport(stats);   break;
+                case 'monthly': renderMonthlyReport();      break;
+                case 'profit':  renderProfitReport(stats);  break;
+                case 'expense': renderExpenseReport(stats); break;
+                case 'pl':          renderPLReport(stats);      break;
+                case 'bs':          renderBalanceSheet();       break;
+                case 'accounting':  renderAccounting();         break;
+            }
+        }
+
+        // ---- Daily Report ----
+        function renderDailyReport(stats) {
+            var today = new Date();
+            var todayRange = getReportDateRange('today');
+            var todayInvoices = invoices.filter(function(inv) { return isDateWithinRange(inv.date, todayRange); });
+            var todayExpenses = expenses.filter(function(exp) { return isDateWithinRange(exp.date, todayRange); });
+            var todaySales = todayInvoices.reduce(function(s,inv) { return s + convertCurrency(Number(inv.total||0), inv.currency||'SAR'); }, 0);
+            var todayExpTotal = todayExpenses.reduce(function(s,e) { return s + convertCurrency(Number(e.amount||0)); }, 0);
+            var todayProfit = todaySales - todayExpTotal;
+
+            var label = document.getElementById('dailyReportDateLabel');
+            if (label) label.textContent = today.toLocaleDateString(undefined, {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+            var kpiGrid = document.getElementById('dailyKpiGrid');
+            if (kpiGrid) kpiGrid.innerHTML = [
+                ['Today\'s Sales',    formatCurrency(todaySales),    'fas fa-dollar-sign',       ''],
+                ['Today\'s Expenses', formatCurrency(todayExpTotal), 'fas fa-receipt',           ''],
+                ['Net Profit',        formatCurrency(todayProfit),   'fas fa-sack-dollar',        todayProfit >= 0 ? 'color:var(--success-color,#28a745)' : 'color:#dc3545'],
+                ['Invoices Today',    todayInvoices.length,          'fas fa-file-invoice-dollar','']
+            ].map(function(k) {
+                return '<div class="report-kpi-card"><span>' + k[0] + '</span><strong style="' + k[3] + '">' + k[1] + '</strong><small>' + k[2].replace('fas ','') + '</small></div>';
+            }).join('');
+
+            var invBody = document.getElementById('dailyInvoicesTableBody');
+            if (invBody) {
+                if (!todayInvoices.length) {
+                    invBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-secondary);padding:20px;">No invoices today</td></tr>';
+                } else {
+                    invBody.innerHTML = todayInvoices.map(function(inv) {
+                        var status = getInvoiceReportStatus(inv);
+                        var statusColor = status==='Paid'?'#28a745':status==='Overdue'?'#dc3545':'#ffc107';
+                        return '<tr><td>' + escapeHtml(inv.invoiceNumber||inv.id||'-') + '</td>' +
+                               '<td>' + escapeHtml(resolveCustomerName(inv)) + '</td>' +
+                               '<td>' + formatCurrency(convertCurrency(Number(inv.total||0), inv.currency||'SAR')) + '</td>' +
+                               '<td><span style="color:' + statusColor + ';font-weight:600">' + status + '</span></td></tr>';
+                    }).join('');
+                }
+            }
+
+            var expBody = document.getElementById('dailyExpensesTableBody');
+            if (expBody) {
+                if (!todayExpenses.length) {
+                    expBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-secondary);padding:20px;">No expenses today</td></tr>';
+                } else {
+                    expBody.innerHTML = todayExpenses.map(function(exp) {
+                        return '<tr><td>' + escapeHtml(exp.category||'General') + '</td>' +
+                               '<td>' + escapeHtml(exp.description||exp.notes||'-') + '</td>' +
+                               '<td>' + formatCurrency(convertCurrency(Number(exp.amount||0))) + '</td></tr>';
+                    }).join('');
+                }
+            }
+        }
+
+        // ---- Monthly Report ----
+        function renderMonthlyReport() {
+            var yearSel = document.getElementById('monthlyReportYear');
+            if (!yearSel) return;
+
+            // Populate year selector if empty
+            if (!yearSel.options.length) {
+                var years = new Set();
+                var curYear = new Date().getFullYear();
+                years.add(curYear);
+                invoices.forEach(function(inv) { var d=parseReportDate(inv.date); if(d) years.add(d.getFullYear()); });
+                expenses.forEach(function(exp) { var d=parseReportDate(exp.date); if(d) years.add(d.getFullYear()); });
+                Array.from(years).sort(function(a,b){return b-a;}).forEach(function(y) {
+                    var opt = document.createElement('option');
+                    opt.value = y; opt.textContent = y;
+                    if (y === curYear) opt.selected = true;
+                    yearSel.appendChild(opt);
+                });
+            }
+
+            var year = parseInt(yearSel.value, 10) || new Date().getFullYear();
+            var months = [];
+            var totalSales=0, totalExp=0, totalInv=0;
+            for (var m = 0; m < 12; m++) {
+                var start = new Date(year, m, 1);
+                var end = new Date(year, m+1, 0, 23, 59, 59);
+                var range = {start:start, end:end};
+                var mInvoices = invoices.filter(function(inv){ return isDateWithinRange(inv.date, range); });
+                var mExpenses = expenses.filter(function(exp){ return isDateWithinRange(exp.date, range); });
+                var sales = mInvoices.reduce(function(s,inv){ return s+convertCurrency(Number(inv.total||0),inv.currency||'SAR'); }, 0);
+                var exp   = mExpenses.reduce(function(s,e){ return s+convertCurrency(Number(e.amount||0)); }, 0);
+                var profit = sales - exp;
+                var margin = sales > 0 ? ((profit/sales)*100).toFixed(1) : '0.0';
+                totalSales += sales; totalExp += exp; totalInv += mInvoices.length;
+                months.push({ label: start.toLocaleDateString(undefined,{month:'short'}), sales:sales, exp:exp, profit:profit, invoices:mInvoices.length, margin:margin });
+            }
+
+            // KPI
+            var totalProfit = totalSales - totalExp;
+            var kpiGrid = document.getElementById('monthlyKpiGrid');
+            if (kpiGrid) kpiGrid.innerHTML = [
+                ['Total Sales ' + year,    formatCurrency(totalSales),   ''],
+                ['Total Expenses ' + year, formatCurrency(totalExp),     ''],
+                ['Net Profit ' + year,     formatCurrency(totalProfit),  totalProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
+                ['Total Invoices ' + year, totalInv,                     '']
+            ].map(function(k){
+                return '<div class="report-kpi-card"><span>'+k[0]+'</span><strong style="'+k[2]+'">'+k[1]+'</strong></div>';
+            }).join('');
+
+            // Chart
+            var ctx = document.getElementById('monthlyReportChart');
+            if (ctx) {
+                if (reportTabCharts.monthly) { reportTabCharts.monthly.destroy(); }
+                reportTabCharts.monthly = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: months.map(function(m){ return m.label; }),
+                        datasets: [
+                            { label:'Sales', data: months.map(function(m){ return m.sales; }), backgroundColor:'rgba(74,144,226,0.7)', borderRadius:6 },
+                            { label:'Expenses', data: months.map(function(m){ return m.exp; }), backgroundColor:'rgba(220,53,69,0.6)', borderRadius:6 },
+                            { label:'Profit', data: months.map(function(m){ return m.profit; }), backgroundColor:'rgba(40,167,69,0.6)', borderRadius:6 }
+                        ]
+                    },
+                    options: { responsive:true, plugins:{ legend:{ position:'top' } }, scales:{ x:{grid:{display:false}}, y:{beginAtZero:true} } }
+                });
+            }
+
+            // Table
+            var tbody = document.getElementById('monthlyReportTableBody');
+            if (tbody) {
+                tbody.innerHTML = months.map(function(m) {
+                    var profitColor = m.profit >= 0 ? '#28a745' : '#dc3545';
+                    return '<tr><td>' + m.label + '</td><td>' + formatCurrency(m.sales) + '</td>' +
+                           '<td>' + formatCurrency(m.exp) + '</td>' +
+                           '<td style="color:'+profitColor+';font-weight:600">' + formatCurrency(m.profit) + '</td>' +
+                           '<td>' + m.invoices + '</td><td>' + m.margin + '%</td></tr>';
+                }).join('');
+            }
+            var tfoot = document.getElementById('monthlyReportTableFoot');
+            var totMargin = totalSales>0 ? ((totalProfit/totalSales)*100).toFixed(1):'0.0';
+            if (tfoot) tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-primary)">' +
+                '<td>Total</td><td>' + formatCurrency(totalSales) + '</td><td>' + formatCurrency(totalExp) + '</td>' +
+                '<td style="color:' + (totalProfit>=0?'#28a745':'#dc3545') + '">' + formatCurrency(totalProfit) + '</td>' +
+                '<td>' + totalInv + '</td><td>' + totMargin + '%</td></tr>';
+        }
+
+        // ---- Profit Report ----
+        function renderProfitReport(stats) {
+            var label = document.getElementById('profitReportRangeLabel');
+            if (label) label.textContent = stats.rangeLabel;
+
+            var totalRev = stats.totalSales;
+            var totalExp = stats.totalExpenses;
+            var grossProfit = totalRev; // simplified (no COGS tracked separately)
+            var netProfit = stats.netProfit;
+            var margin = totalRev > 0 ? ((netProfit/totalRev)*100).toFixed(1) : '0.0';
+
+            var kpiGrid = document.getElementById('profitKpiGrid');
+            if (kpiGrid) kpiGrid.innerHTML = [
+                ['Total Revenue',   formatCurrency(totalRev),   ''],
+                ['Total Expenses',  formatCurrency(totalExp),   ''],
+                ['Net Profit',      formatCurrency(netProfit),  netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
+                ['Profit Margin',   margin + '%',               netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545']
+            ].map(function(k){
+                return '<div class="report-kpi-card"><span>'+k[0]+'</span><strong style="'+k[2]+'">'+k[1]+'</strong></div>';
+            }).join('');
+
+            // Profit trend chart
+            var ctx = document.getElementById('profitTrendChart');
+            if (ctx) {
+                if (reportTabCharts.profit) { reportTabCharts.profit.destroy(); }
+                var pt = stats.profitTrend;
+                reportTabCharts.profit = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: pt.labels,
+                        datasets: [
+                            { label:'Revenue', data:pt.revenue, borderColor:'rgba(74,144,226,1)', backgroundColor:'rgba(74,144,226,0.1)', fill:true, tension:0.3 },
+                            { label:'Expenses', data:pt.expenses, borderColor:'rgba(220,53,69,1)', backgroundColor:'rgba(220,53,69,0.08)', fill:true, tension:0.3 },
+                            { label:'Net Profit', data:pt.profit, borderColor:'rgba(40,167,69,1)', backgroundColor:'rgba(40,167,69,0.08)', fill:true, tension:0.3 }
+                        ]
+                    },
+                    options: { responsive:true, plugins:{legend:{position:'top'}}, scales:{x:{grid:{display:false}},y:{beginAtZero:true}} }
+                });
+            }
+
+            // Profit by product
+            var tbody = document.getElementById('profitByProductTableBody');
+            if (tbody) {
+                var rows = stats.productStats.rows;
+                if (!rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-secondary);padding:20px;">No product data in range</td></tr>';
+                } else {
+                    tbody.innerHTML = rows.map(function(r) {
+                        var m = r.revenue > 0 ? ((r.profit/r.revenue)*100).toFixed(1) : '0.0';
+                        var c = r.profit >= 0 ? '#28a745' : '#dc3545';
+                        return '<tr><td>' + escapeHtml(r.name) + '</td><td>' + formatCurrency(r.revenue) + '</td>' +
+                               '<td style="color:'+c+';font-weight:600">' + formatCurrency(r.profit) + '</td>' +
+                               '<td style="color:'+c+'">' + m + '%</td></tr>';
+                    }).join('');
+                }
+            }
+        }
+
+        // ---- Expense Report ----
+        function renderExpenseReport(stats) {
+            var label = document.getElementById('expenseReportRangeLabel');
+            if (label) label.textContent = stats.rangeLabel;
+
+            var totalExp = stats.totalExpenses;
+            var catRows = stats.expenseStats.rows;
+            var days = Math.max(1, Math.ceil((stats.range.end - stats.range.start) / 86400000));
+            var avgPerDay = totalExp / days;
+            var topCat = catRows[0] ? catRows[0].category : 'N/A';
+
+            var kpiGrid = document.getElementById('expenseKpiGrid');
+            if (kpiGrid) kpiGrid.innerHTML = [
+                ['Total Expenses',    formatCurrency(totalExp),       ''],
+                ['Daily Average',     formatCurrency(avgPerDay),      ''],
+                ['Top Category',      escapeHtml(topCat),             ''],
+                ['Expense Count',     stats.filteredExpenses.length,  '']
+            ].map(function(k){
+                return '<div class="report-kpi-card"><span>'+k[0]+'</span><strong>'+k[1]+'</strong></div>';
+            }).join('');
+
+            // Pie chart - expense by category
+            var catCtx = document.getElementById('expenseCategoryChart');
+            if (catCtx) {
+                if (reportTabCharts.expenseCat) { reportTabCharts.expenseCat.destroy(); }
+                var colors = ['#4a90e2','#dc3545','#ffc107','#28a745','#6f42c1','#fd7e14','#20c997','#e83e8c'];
+                reportTabCharts.expenseCat = new Chart(catCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: catRows.map(function(r){ return r.category; }),
+                        datasets: [{ data: catRows.map(function(r){ return r.amount; }),
+                            backgroundColor: catRows.map(function(_,i){ return colors[i%colors.length]; }) }]
+                    },
+                    options: { responsive:true, plugins:{ legend:{ position:'right' } } }
+                });
+            }
+
+            // Expense trend chart
+            var trendCtx = document.getElementById('expenseTrendChart2');
+            if (trendCtx) {
+                if (reportTabCharts.expenseTrend) { reportTabCharts.expenseTrend.destroy(); }
+                var et = stats.expenseStats.trend;
+                reportTabCharts.expenseTrend = new Chart(trendCtx, {
+                    type: 'bar',
+                    data: { labels: et.labels, datasets:[{ label:'Expenses', data:et.values, backgroundColor:'rgba(220,53,69,0.65)', borderRadius:5 }] },
+                    options: { responsive:true, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}},y:{beginAtZero:true}} }
+                });
+            }
+
+            // Detail table
+            var detailBody = document.getElementById('expenseDetailTableBody');
+            if (detailBody) {
+                var exps = stats.filteredExpenses.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+                if (!exps.length) {
+                    detailBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-secondary);padding:20px;">No expenses in range</td></tr>';
+                } else {
+                    detailBody.innerHTML = exps.map(function(e) {
+                        return '<tr><td>' + escapeHtml(e.date||'-') + '</td><td>' + escapeHtml(e.category||'General') + '</td>' +
+                               '<td>' + escapeHtml(e.description||e.notes||'-') + '</td>' +
+                               '<td>' + formatCurrency(convertCurrency(Number(e.amount||0))) + '</td></tr>';
+                    }).join('');
+                }
+            }
+
+            // Category summary table
+            var catBody = document.getElementById('expenseCategoryTableBody');
+            if (catBody) {
+                if (!catRows.length) {
+                    catBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-secondary);padding:20px;">No expenses in range</td></tr>';
+                } else {
+                    catBody.innerHTML = catRows.map(function(r) {
+                        var pct = totalExp > 0 ? ((r.amount/totalExp)*100).toFixed(1) : '0.0';
+                        return '<tr><td>' + escapeHtml(r.category) + '</td><td>' + formatCurrency(r.amount) + '</td><td>' + pct + '%</td></tr>';
+                    }).join('');
+                }
+            }
+        }
+
+        // ---- Profit & Loss Report ----
+        function renderPLReport(stats) {
+            var label = document.getElementById('plReportRangeLabel');
+            if (label) label.textContent = stats.rangeLabel;
+
+            var revenue = stats.totalSales;
+            var totalExpenses = stats.totalExpenses;
+            var catRows = stats.expenseStats.rows;
+            var netProfit = revenue - totalExpenses;
+
+            function plRow(label, val, cls, indent) {
+                var formatted = typeof val === 'number' ? formatCurrency(Math.abs(val)) : val;
+                var sign = (typeof val === 'number' && val < 0) ? '-' : '';
+                return '<div class="pl-row' + (cls?' '+cls:'') + (indent?' indent':'') + '">' +
+                       '<span>' + label + '</span><span>' + sign + formatted + '</span></div>';
+            }
+
+            var html = '<div class="pl-section-title">Revenue</div>';
+            html += plRow('Total Sales / Revenue', revenue, '', false);
+            html += plRow('Total Revenue', revenue, 'subtotal', false);
+
+            html += '<div class="pl-section-title">Operating Expenses</div>';
+            if (catRows.length) {
+                catRows.forEach(function(r) {
+                    html += plRow(r.category, r.amount, '', true);
+                });
+            } else if (totalExpenses > 0) {
+                html += plRow('General Expenses', totalExpenses, '', true);
+            } else {
+                html += '<div class="pl-row indent" style="color:var(--text-secondary)"><span>No expenses in selected range</span><span>—</span></div>';
+            }
+            html += plRow('Total Expenses', totalExpenses, 'subtotal', false);
+
+            var netCls = netProfit >= 0 ? 'profit' : 'loss';
+            html += '<div class="pl-section-title">' + (netProfit >= 0 ? 'Net Profit' : 'Net Loss') + '</div>';
+            html += '<div class="pl-row total">' +
+                    '<span>' + (netProfit >= 0 ? 'Net Profit' : 'Net Loss') + '</span>' +
+                    '<span>' + formatCurrency(Math.abs(netProfit)) + '</span></div>';
+
+            var container = document.getElementById('plStatement');
+            if (container) container.innerHTML = html;
+        }
+
+        // ---- Balance Sheet ----
+        function renderBalanceSheet() {
+            var today = new Date();
+            var label = document.getElementById('bsReportDateLabel');
+            if (label) label.textContent = 'As of ' + today.toLocaleDateString(undefined, {year:'numeric',month:'long',day:'numeric'});
+
+            // === ASSETS ===
+            // Cash / received revenue = all paid invoices
+            var cashReceived = invoices
+                .filter(function(inv){ return getInvoiceReportStatus(inv) === 'Paid'; })
+                .reduce(function(s,inv){ return s + convertCurrency(Number(inv.total||0), inv.currency||'SAR'); }, 0);
+
+            // Accounts Receivable = pending + overdue invoices
+            var receivables = invoices
+                .filter(function(inv){ var st=getInvoiceReportStatus(inv); return st==='Pending'||st==='Overdue'; })
+                .reduce(function(s,inv){ return s + convertCurrency(Number(inv.amountDue||inv.total||0), inv.currency||'SAR'); }, 0);
+
+            // Inventory = products × cost price
+            var inventoryValue = savedProducts.reduce(function(s,p){ return s + (Number(p.cost||0) * Number(p.stock||0)); }, 0);
+
+            var totalAssets = cashReceived + receivables + inventoryValue;
+
+            // === LIABILITIES ===
+            var supplierPayables = suppliers.reduce(function(s,sup){ return s + convertCurrency(Number(sup.dueAmount||0)); }, 0);
+            var totalLiabilities = supplierPayables;
+
+            // === EQUITY ===
+            var equity = totalAssets - totalLiabilities;
+
+            function bsSection(title, rows, totalLabel, totalVal, totalColor) {
+                var html = '<div class="pl-section-title">' + title + '</div>';
+                rows.forEach(function(r){
+                    html += '<div class="pl-row indent"><span>' + r[0] + '</span><span>' + formatCurrency(r[1]) + '</span></div>';
+                });
+                html += '<div class="pl-row subtotal"><span>' + totalLabel + '</span><span>' + formatCurrency(totalVal) + '</span></div>';
+                return html;
+            }
+
+            var assetsHtml = '<h3 style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--accent)"><i class="fas fa-coins"></i> Assets</h3>';
+            assetsHtml += bsSection('Current Assets',
+                [['Cash & Revenue Received', cashReceived],
+                 ['Accounts Receivable', receivables],
+                 ['Inventory Value', inventoryValue]],
+                'Total Assets', totalAssets, '#28a745');
+            assetsHtml += '<div class="pl-row total"><span>Total Assets</span><span>' + formatCurrency(totalAssets) + '</span></div>';
+
+            var liabEqHtml = '<h3 style="font-size:16px;font-weight:700;margin-bottom:12px;color:#dc3545"><i class="fas fa-file-invoice-dollar"></i> Liabilities &amp; Equity</h3>';
+            liabEqHtml += bsSection('Liabilities',
+                [['Accounts Payable (Suppliers)', supplierPayables]],
+                'Total Liabilities', totalLiabilities, '#dc3545');
+            liabEqHtml += bsSection('Equity',
+                [['Net Assets (Owner\'s Equity)', equity]],
+                'Total Equity', equity, equity>=0?'#28a745':'#dc3545');
+            liabEqHtml += '<div class="pl-row total"><span>Liabilities + Equity</span><span>' + formatCurrency(totalLiabilities + equity) + '</span></div>';
+
+            var assetsEl = document.getElementById('bsAssets');
+            var liabEl = document.getElementById('bsLiabilitiesEquity');
+            if (assetsEl) assetsEl.innerHTML = assetsHtml;
+            if (liabEl) liabEl.innerHTML = liabEqHtml;
+
+            // Balance check
+            var diff = Math.abs(totalAssets - (totalLiabilities + equity));
+            var checkEl = document.getElementById('bsBalanceCheck');
+            if (checkEl) {
+                checkEl.innerHTML = diff < 0.01
+                    ? '<i class="fas fa-check-circle" style="color:#28a745;font-size:24px;"></i><p style="color:#28a745;font-weight:700;margin-top:8px;">Balance Sheet is Balanced ✓</p><small style="color:var(--text-secondary)">Total Assets = Total Liabilities + Equity (' + formatCurrency(totalAssets) + ')</small>'
+                    : '<i class="fas fa-exclamation-circle" style="color:#ffc107;font-size:24px;"></i><p style="color:#ffc107;font-weight:600;margin-top:8px;">Note: Simplified view — some items may not be tracked in the system</p>';
+            }
+        }
+        // ==================== END REPORT TABS ====================
 
         function getActiveReportFilters() {
             return {
