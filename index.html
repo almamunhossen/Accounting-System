@@ -247,8 +247,8 @@
                     </div>
                 </div>
                 
-                <div class="search-bar" style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <input type="text" id="customerSearchInput" placeholder="Search by ID, name, phone, company, or email..." onkeyup="filterCustomers()" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary);">
+                <div class="search-bar">
+                    <input type="text" id="customerSearchInput" class="search-input" placeholder="Search by ID, name, phone, company, or email..." oninput="filterCustomers()">
                     <select id="tagFilter" onchange="filterCustomers()" class="search-select">
                         <option value="">All Tags</option>
                         <option value="VIP">VIP</option>
@@ -261,6 +261,7 @@
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                     </select>
+                    <span id="customerResultCount" style="font-size:13px;color:var(--text-secondary);white-space:nowrap;padding:4px 8px;"></span>
                 </div>
                 
                 <div id="customersList" class="customers-grid"></div>
@@ -277,13 +278,14 @@
                     </div>
                 </div>
 
-                <div class="search-bar" style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <input type="text" id="supplierSearchInput" placeholder="Search by ID, name, phone, company, or email..." onkeyup="filterSuppliers()" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary);">
+                <div class="search-bar">
+                    <input type="text" id="supplierSearchInput" class="search-input" placeholder="Search by ID, name, phone, company, or email..." oninput="filterSuppliers()">
                     <select id="supplierStatusFilter" onchange="filterSuppliers()" class="search-select">
                         <option value="">All Status</option>
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                     </select>
+                    <span id="supplierResultCount" style="font-size:13px;color:var(--text-secondary);white-space:nowrap;padding:4px 8px;"></span>
                 </div>
 
                 <div id="suppliersList" class="customers-grid"></div>
@@ -424,7 +426,7 @@
                     </button>
                 </div>
                 <div class="search-bar" style="margin-bottom:16px;">
-                    <input type="text" id="accountingSearchInput" placeholder="Search by date or description..." onkeyup="renderAccounting()" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--card-bg);color:var(--text-primary);">
+                    <input type="text" id="accountingSearchInput" class="search-input" placeholder="Search by date or description..." oninput="renderAccounting()">
                 </div>
                 <div style="overflow-x:auto;">
                     <table style="width:100%;border-collapse:collapse;background:var(--card-bg);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);">
@@ -457,7 +459,7 @@
                     </button>
                 </div>
                 <div class="form-section" style="margin-bottom:16px;">
-                    <input type="text" id="expenseSearchInput" placeholder="Search by ID, description, category or date..." onkeyup="renderExpenses()" style="width:100%;padding:10px 15px;border-radius:10px;border:1px solid var(--border-color);background:var(--card-bg);color:var(--text-primary);font-size:14px;">
+                    <input type="text" id="expenseSearchInput" class="search-input" placeholder="Search by ID, description, category or date..." oninput="renderExpenses()">
                 </div>
                 <div id="expensesListContainer"></div>
             </div>
@@ -479,7 +481,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Search Products</label>
-                            <input type="text" id="productSearchInput" placeholder="Search by ID, name, supplier, or description..." onkeyup="filterProducts()" style="width: 100%; padding: 12px 15px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); font-size: 14px;">
+                            <input type="text" id="productSearchInput" class="search-input" placeholder="Search by ID, name, supplier, or description..." oninput="filterProducts()">
                         </div>
                     </div>
                 </div>
@@ -515,7 +517,7 @@
                     </button>
                 </div>
                 <div class="search-bar">
-                    <input type="text" id="invoiceSearchInput" placeholder="Search by ID, invoice no, customer, date, or status..." onkeyup="filterInvoices()" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <input type="text" id="invoiceSearchInput" class="search-input" placeholder="Search by ID, invoice no, customer, date, or status..." oninput="filterInvoices()">
                 </div>
                 <div id="invoiceTableContainer"></div>
             </div>
@@ -696,9 +698,8 @@
                         id="quotationSearchInput"
                         type="text"
                         placeholder="Search by ID, quotation no, customer, item, or date..."
-                        onkeyup="filterQuotations()"
-                        class="w-full rounded-2xl px-4 py-3 text-sm shadow-sm focus:outline-none"
-                        style="border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary);"
+                        oninput="filterQuotations()"
+                        class="search-input w-full"
                     />
                 </div>
                 <div id="quotationsList" style="overflow-x:auto;border-radius:8px;background:var(--card-bg);padding:16px;box-shadow:0 4px 16px rgba(0,0,0,0.08);"></div>

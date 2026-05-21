@@ -243,6 +243,45 @@
 
         /* ===== SELECT DROPDOWNS & SEARCH INPUTS — DARK MODE ===== */
 
+        /* ===== SEARCH BAR & SEARCH INPUT ===== */
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 180px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1.5px solid var(--border-color);
+            background: var(--card-bg);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        body.dark-mode .search-input {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+
         /* search-select: used on All Tags / All Status dropdowns */
         .search-select {
             padding: 10px 12px;
@@ -2649,6 +2688,18 @@
             .main-content {
                 margin-left: 0;
                 padding: 15px;
+            }
+
+            /* Search bar stacks vertically on mobile */
+            .search-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-input,
+            .search-select {
+                width: 100%;
+                min-width: 0;
             }
 
             .logo {

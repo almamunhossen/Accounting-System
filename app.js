@@ -1035,7 +1035,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const rows = await window.APIClient.getData('getCustomers');
             // Filter out corrupted rows (missing name) that were created by old backend versions
             customers = rows.filter(r => String(r.name || '').trim()).map(normalizeCustomerFromApi);
-            saveApiCache();
             renderCustomers();
         }
 
@@ -1477,62 +1476,108 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         // ---- localStorage cache for instant UI on next page load ----
-        const LS_CACHE_KEY = 'pic_gs_cache_v2';
-        const LS_LOGO_KEY = 'pic_company_logo_v1';
-        const LS_SETTINGS_KEY = 'pic_company_settings_v1';
+        const LS_CACHE_KEY     = 'pic_gs_cache_v2';       // legacy unified key — kept for fallback reads only
+        const LS_LOGO_KEY      = 'pic_company_logo_v1';
+        const LS_SETTINGS_KEY  = 'pic_company_settings_v1';
+
+        // Per-entity keys: smaller JSON chunks = faster serialise/parse than one huge blob
+        const LS_EK = {
+            c:    'pic_e_c_v3',   // customers
+            s:    'pic_e_s_v3',   // suppliers
+            i:    'pic_e_i_v3',   // invoices
+            q:    'pic_e_q_v3',   // quotations
+            p:    'pic_e_p_v3',   // products
+            e:    'pic_e_ex_v3',  // expenses
+            a:    'pic_e_ac_v3',  // accounting
+            hEmp: 'pic_e_hre_v3', // hr employees
+            hAtt: 'pic_e_hra_v3', // hr attendance
+            hLv:  'pic_e_hrl_v3', // hr leaves
+            hTsk: 'pic_e_hrt_v3', // hr tasks
+            meta: 'pic_e_m_v3'    // numbers + timestamp
+        };
+
+        let _saveCacheTimer = null;
 
         function saveApiCache() {
-            try {
-                localStorage.setItem(LS_CACHE_KEY, JSON.stringify({
-                    customers,
-                    suppliers,
-                    invoices,
-                    quotations,
-                    products: savedProducts,
-                    expenses,
-                    accountingEntries,
-                    hrEmployees,
-                    hrAttendance,
-                    hrLeaves,
-                    hrTasks,
-                    nextInvoiceNumber,
-                    nextQuotationNumber,
-                    savedAt: Date.now()
-                }));
-            } catch (e) {
-                // localStorage quota exceeded — skip silently
-            }
+            // Debounce: merge rapid successive calls into one write (300 ms window)
+            clearTimeout(_saveCacheTimer);
+            _saveCacheTimer = setTimeout(function _doSaveCache() {
+                const trySet = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {} };
+                const doWrite = () => {
+                    trySet(LS_EK.c,    customers);
+                    trySet(LS_EK.s,    suppliers);
+                    trySet(LS_EK.i,    invoices);
+                    trySet(LS_EK.q,    quotations);
+                    trySet(LS_EK.p,    savedProducts);
+                    trySet(LS_EK.e,    expenses);
+                    trySet(LS_EK.a,    accountingEntries);
+                    trySet(LS_EK.hEmp, hrEmployees);
+                    trySet(LS_EK.hAtt, hrAttendance);
+                    trySet(LS_EK.hLv,  hrLeaves);
+                    trySet(LS_EK.hTsk, hrTasks);
+                    trySet(LS_EK.meta, { nextInvoiceNumber, nextQuotationNumber, savedAt: Date.now() });
+                };
+                // Run during browser idle time so it never blocks the UI
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(doWrite, { timeout: 2000 });
+                } else {
+                    doWrite();
+                }
+            }, 300);
         }
 
         function loadApiCache() {
-            // Restore settings from localStorage so company logo/name survive page refresh
+            // Restore settings so company logo/name survive page refresh
             try {
                 const rawSettings = localStorage.getItem(LS_SETTINGS_KEY);
-                if (rawSettings) {
-                    const s = JSON.parse(rawSettings);
-                    writeStoredJson('pro_invoice_settings', s);
+                if (rawSettings) writeStoredJson('pro_invoice_settings', JSON.parse(rawSettings));
+            } catch (_) { /* ignore */ }
+
+            const readArr = (key) => {
+                try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return Array.isArray(v) && v.length ? v : null; }
+                catch (_) { return null; }
+            };
+
+            // Fast path: per-entity keys (v3) — each small chunk parsed independently
+            try {
+                const meta = JSON.parse(localStorage.getItem(LS_EK.meta) || 'null');
+                if (meta) {
+                    const c  = readArr(LS_EK.c);    if (c)  customers         = c;
+                    const s  = readArr(LS_EK.s);    if (s)  suppliers         = s;
+                    const i  = readArr(LS_EK.i);    if (i)  invoices          = i;
+                    const q  = readArr(LS_EK.q);    if (q)  quotations        = q;
+                    const p  = readArr(LS_EK.p);    if (p)  savedProducts     = p;
+                    const e  = readArr(LS_EK.e);    if (e)  expenses          = e;
+                    const a  = readArr(LS_EK.a);    if (a)  accountingEntries = a;
+                    const he = readArr(LS_EK.hEmp); if (he) hrEmployees       = he;
+                    const ha = readArr(LS_EK.hAtt); if (ha) hrAttendance      = ha;
+                    const hl = readArr(LS_EK.hLv);  if (hl) hrLeaves          = hl;
+                    const ht = readArr(LS_EK.hTsk); if (ht) hrTasks           = ht;
+                    if (Number.isFinite(meta.nextInvoiceNumber)   && meta.nextInvoiceNumber   > 2001) nextInvoiceNumber   = meta.nextInvoiceNumber;
+                    if (Number.isFinite(meta.nextQuotationNumber) && meta.nextQuotationNumber > 2001) nextQuotationNumber = meta.nextQuotationNumber;
+                    return; // done — no need to read legacy key
                 }
-            } catch (ex) { /* ignore */ }
+            } catch (_) { /* fall through */ }
+
+            // Slow path: legacy unified key (pic_gs_cache_v2) — one large JSON blob
             try {
                 const raw = localStorage.getItem(LS_CACHE_KEY);
                 if (!raw) return;
                 const c = JSON.parse(raw);
-                if (Array.isArray(c.customers) && c.customers.length) customers = c.customers;
-                if (Array.isArray(c.suppliers) && c.suppliers.length) suppliers = c.suppliers;
-                if (Array.isArray(c.invoices) && c.invoices.length) invoices = c.invoices;
-                if (Array.isArray(c.quotations) && c.quotations.length) quotations = c.quotations;
-                if (Array.isArray(c.products) && c.products.length) savedProducts = c.products;
-                if (Array.isArray(c.expenses) && c.expenses.length) expenses = c.expenses;
+                if (Array.isArray(c.customers)         && c.customers.length)         customers         = c.customers;
+                if (Array.isArray(c.suppliers)         && c.suppliers.length)         suppliers         = c.suppliers;
+                if (Array.isArray(c.invoices)          && c.invoices.length)          invoices          = c.invoices;
+                if (Array.isArray(c.quotations)        && c.quotations.length)        quotations        = c.quotations;
+                if (Array.isArray(c.products)          && c.products.length)          savedProducts     = c.products;
+                if (Array.isArray(c.expenses)          && c.expenses.length)          expenses          = c.expenses;
                 if (Array.isArray(c.accountingEntries) && c.accountingEntries.length) accountingEntries = c.accountingEntries;
-                if (Array.isArray(c.hrEmployees) && c.hrEmployees.length) hrEmployees = c.hrEmployees;
-                if (Array.isArray(c.hrAttendance) && c.hrAttendance.length) hrAttendance = c.hrAttendance;
-                if (Array.isArray(c.hrLeaves) && c.hrLeaves.length) hrLeaves = c.hrLeaves;
-                if (Array.isArray(c.hrTasks) && c.hrTasks.length) hrTasks = c.hrTasks;
-                if (Number.isFinite(c.nextInvoiceNumber) && c.nextInvoiceNumber > 2001) nextInvoiceNumber = c.nextInvoiceNumber;
+                if (Array.isArray(c.hrEmployees)       && c.hrEmployees.length)       hrEmployees       = c.hrEmployees;
+                if (Array.isArray(c.hrAttendance)      && c.hrAttendance.length)      hrAttendance      = c.hrAttendance;
+                if (Array.isArray(c.hrLeaves)          && c.hrLeaves.length)          hrLeaves          = c.hrLeaves;
+                if (Array.isArray(c.hrTasks)           && c.hrTasks.length)           hrTasks           = c.hrTasks;
+                if (Number.isFinite(c.nextInvoiceNumber)   && c.nextInvoiceNumber   > 2001) nextInvoiceNumber   = c.nextInvoiceNumber;
                 if (Number.isFinite(c.nextQuotationNumber) && c.nextQuotationNumber > 2001) nextQuotationNumber = c.nextQuotationNumber;
-            } catch (e) {
-                // Ignore cache read errors
-            }
+            } catch (_) { /* ignore */ }
         }
 
         // ==================== ACCOUNTING ====================
@@ -1878,27 +1923,41 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         // ==================== CUSTOMER MANAGEMENT ====================
         function renderCustomers() {
-            const searchTerm = document.getElementById('customerSearchInput')?.value.toLowerCase() || '';
+            try {
+            const searchTerm = (document.getElementById('customerSearchInput')?.value || '').toLowerCase().trim();
             const tagFilter = document.getElementById('tagFilter')?.value || '';
             const statusFilter = document.getElementById('customerStatusFilter')?.value || '';
-            const filtered = customers.filter(c => 
-                (
-                    String(c.id || '').toLowerCase().includes(searchTerm) ||
-                    String(c.name || '').toLowerCase().includes(searchTerm) ||
-                    (c.phone || '').toLowerCase().includes(searchTerm) ||
-                    (c.email || '').toLowerCase().includes(searchTerm) ||
-                    (c.company || '').toLowerCase().includes(searchTerm) ||
-                    (c.address || '').toLowerCase().includes(searchTerm)
-                ) &&
-                (tagFilter === '' || c.tag === tagFilter) &&
-                (statusFilter === '' || (c.status || 'Active') === statusFilter)
-            );
+            const filtered = customers.filter(c => {
+                if (searchTerm) {
+                    const match =
+                        String(c.id || '').toLowerCase().includes(searchTerm) ||
+                        String(c.name || '').toLowerCase().includes(searchTerm) ||
+                        String(c.phone || '').toLowerCase().includes(searchTerm) ||
+                        String(c.email || '').toLowerCase().includes(searchTerm) ||
+                        String(c.company || '').toLowerCase().includes(searchTerm) ||
+                        String(c.address || '').toLowerCase().includes(searchTerm);
+                    if (!match) return false;
+                }
+                if (tagFilter && c.tag !== tagFilter) return false;
+                if (statusFilter && (c.status || 'Active') !== statusFilter) return false;
+                return true;
+            });
             
             const container = document.getElementById('customersList');
             if (!container) return;
 
+            // Update result count badge
+            const countEl = document.getElementById('customerResultCount');
+            if (countEl) {
+                countEl.textContent = searchTerm || tagFilter || statusFilter
+                    ? `${filtered.length} of ${customers.length} customers`
+                    : `${customers.length} customers`;
+            }
+
             if (filtered.length === 0) {
-                container.innerHTML = '<div class="supplier-list-shell"><p class="supplier-empty-state">No customers found.</p></div>';
+                container.innerHTML = '<div class="supplier-list-shell"><p class="supplier-empty-state">' +
+                    (customers.length === 0 ? 'No customers yet. Add your first customer!' : 'No customers match your search.') +
+                    '</p></div>';
                 return;
             }
 
@@ -1955,6 +2014,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     </div>
                 </div>
             `;
+            } catch (err) {
+                console.error('[renderCustomers error]', err);
+            }
         }
 
         function showAddCustomerModal() {
@@ -2222,9 +2284,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             }
         }
 
-        const filterCustomers = debounce(function filterCustomers() {
+        window.filterCustomers = function filterCustomers() {
             renderCustomers();
-        }, 250);
+        };
 
         function calculateCustomerFinancials(customerId) {
             const customerInvoices = invoices.filter(inv => String(inv.customerId || '') === String(customerId || ''));
@@ -2296,23 +2358,40 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function renderSuppliers() {
-            const searchTerm = document.getElementById('supplierSearchInput')?.value.toLowerCase() || '';
+            try {
+            const searchTerm = (document.getElementById('supplierSearchInput')?.value || '').toLowerCase().trim();
             const statusFilter = document.getElementById('supplierStatusFilter')?.value || '';
-            const filtered = suppliers.filter(s =>
-                String(s.id || '').toLowerCase().includes(searchTerm) ||
-                (s.name || '').toLowerCase().includes(searchTerm) ||
-                (s.phone || '').toLowerCase().includes(searchTerm) ||
-                (s.email || '').toLowerCase().includes(searchTerm) ||
-                (s.company || '').toLowerCase().includes(searchTerm) ||
-                (s.contactPerson || '').toLowerCase().includes(searchTerm) ||
-                (s.address || '').toLowerCase().includes(searchTerm)
-            ).filter(s => statusFilter === '' || (s.status || 'Active') === statusFilter);
+            const filtered = suppliers.filter(s => {
+                if (searchTerm) {
+                    const match =
+                        String(s.id || '').toLowerCase().includes(searchTerm) ||
+                        String(s.name || '').toLowerCase().includes(searchTerm) ||
+                        String(s.phone || '').toLowerCase().includes(searchTerm) ||
+                        String(s.email || '').toLowerCase().includes(searchTerm) ||
+                        String(s.company || '').toLowerCase().includes(searchTerm) ||
+                        String(s.contactPerson || '').toLowerCase().includes(searchTerm) ||
+                        String(s.address || '').toLowerCase().includes(searchTerm);
+                    if (!match) return false;
+                }
+                if (statusFilter && (s.status || 'Active') !== statusFilter) return false;
+                return true;
+            });
 
             const container = document.getElementById('suppliersList');
             if (!container) return;
 
+            // Update result count badge
+            const countEl = document.getElementById('supplierResultCount');
+            if (countEl) {
+                countEl.textContent = searchTerm || statusFilter
+                    ? `${filtered.length} of ${suppliers.length} suppliers`
+                    : `${suppliers.length} suppliers`;
+            }
+
             if (filtered.length === 0) {
-                container.innerHTML = '<div class="supplier-list-shell"><p class="supplier-empty-state">No suppliers found.</p></div>';
+                container.innerHTML = '<div class="supplier-list-shell"><p class="supplier-empty-state">' +
+                    (suppliers.length === 0 ? 'No suppliers yet. Add your first supplier!' : 'No suppliers match your search.') +
+                    '</p></div>';
                 return;
             }
 
@@ -2367,11 +2446,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     </div>
                 </div>
             `;
+            } catch (err) {
+                console.error('[renderSuppliers error]', err);
+            }
         }
 
-        const filterSuppliers = debounce(function filterSuppliers() {
+        window.filterSuppliers = function filterSuppliers() {
             renderSuppliers();
-        }, 250);
+        };
 
         function showAddSupplierModal() {
             currentSupplierId = null;
@@ -4350,7 +4432,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             }, 350);
         }
 
-        const filterInvoices = debounce(function filterInvoices() {
+        window.filterInvoices = debounce(function filterInvoices() {
             const term = document.getElementById('invoiceSearchInput')?.value.toLowerCase();
             if (!term) return renderInvoiceTable();
             const filtered = invoices.filter(inv =>
@@ -4582,7 +4664,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             `;
         }
 
-        const filterQuotations = debounce(function filterQuotations() {
+        window.filterQuotations = debounce(function filterQuotations() {
             renderQuotations();
         }, 250);
 
@@ -7744,7 +7826,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
         }
 
-        const filterProducts = debounce(function filterProducts() {
+        window.filterProducts = debounce(function filterProducts() {
             renderProducts();
         }, 250);
 
@@ -8118,4 +8200,24 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.body.classList.add('dark-mode');
             syncFloatingPanelThemeBtn(true);
         }
+
+        // ===== Direct Search Input Wiring =====
+        // Belt-and-suspenders: wire every search input directly via addEventListener
+        // so filtering works regardless of inline handler resolution.
+        (function () {
+            function wireSearch(inputId, handler) {
+                var el = document.getElementById(inputId);
+                if (el && typeof handler === 'function') {
+                    el.addEventListener('input', handler);
+                }
+            }
+            wireSearch('customerSearchInput',   renderCustomers);
+            wireSearch('supplierSearchInput',   renderSuppliers);
+            wireSearch('accountingSearchInput', renderAccounting);
+            wireSearch('expenseSearchInput',    renderExpenses);
+            wireSearch('productSearchInput',    renderProducts);
+            wireSearch('invoiceSearchInput',    function () { window.filterInvoices && window.filterInvoices(); });
+            wireSearch('quotationSearchInput',  function () { window.filterQuotations && window.filterQuotations(); });
+        })();
+        // ===== END Direct Search Input Wiring =====
 
