@@ -1209,6 +1209,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 paymentMethod: row.payment_method || row.paymentMethod || 'Cash',
                 total: Number(row.total || 0),
                 amountDue: Number(row.amount_due || row.amountDue || row.total || 0),
+                paidAmount: Number(row.paid_amount || row.paidAmount || 0),
                 status: row.status || 'Unpaid',
                 currency: row.currency || 'SAR'
             }));
@@ -2340,10 +2341,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function calculateCustomerFinancials(customerId) {
             const customerInvoices = invoices.filter(inv => String(inv.customerId || '') === String(customerId || ''));
             const totalPurchase = customerInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
-            const totalPaid = customerInvoices
-                .filter(inv => String(inv.status || '').toLowerCase() === 'paid')
-                .reduce((sum, inv) => sum + Number(inv.total || 0), 0);
-            const dueAmount = Math.max(totalPurchase - totalPaid, 0);
+            const totalPaid = customerInvoices.reduce((sum, inv) => {
+                const advance = Number(inv.advancePayment || 0);
+                const received = Number(inv.paidAmount || 0);
+                return sum + advance + received;
+            }, 0);
+            const dueAmount = Math.max(customerInvoices.reduce((sum, inv) => {
+                const amountDue = Number(inv.amountDue != null ? inv.amountDue : (inv.total - Number(inv.advancePayment || 0)));
+                const received = Number(inv.paidAmount || 0);
+                return sum + Math.max(0, amountDue - received);
+            }, 0), 0);
             const orderCount = customerInvoices.length;
             const sortedDates = customerInvoices
                 .map(inv => inv.date)
@@ -4296,6 +4303,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         advance_payment: invoice.advancePayment,
                         payment_method: invoice.paymentMethod || 'Cash',
                         amount_due: invoice.amountDue,
+                        paid_amount: Number(invoice.paidAmount || 0),
                         currency: invoice.currency,
                         status: invoice.status,
                         items: JSON.stringify(invoice.items || [])
@@ -4393,16 +4401,21 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             container.innerHTML = `
                 <table class="data-table">
                     <thead>
-                        <tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Due Date</th><th>Total</th><th>Status</th><th>Actions</th></tr>
+                        <tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Due Date</th><th>Total</th><th>Remaining Due</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
-                        ${invoices.map(inv => `
+                        ${invoices.map(inv => {
+                            const _advP = Number(inv.advancePayment || 0);
+                            const _amtDue = Number(inv.amountDue != null ? inv.amountDue : (inv.total - _advP));
+                            const _remaining = Math.max(0, _amtDue - Number(inv.paidAmount || 0));
+                            return `
                             <tr>
                                 <td>${inv.invoiceNo}</td>
                                 <td>${inv.customerName}</td>
                                 <td>${inv.date}</td>
                                 <td>${inv.dueDate || '-'}</td>
                                 <td>${formatCurrency(convertCurrency(inv.total, inv.currency))}</td>
+                                <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : formatCurrency(convertCurrency(_remaining, inv.currency))}</td>
                                 <td><span class="status ${inv.status}">${inv.status}</span></td>
                                 <td style="text-align:center;">
                                     <div class="action-dropdown">
@@ -4411,14 +4424,15 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                             <button onclick="editInvoice('${inv.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
                                             <button onclick="printInvoiceById('${inv.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>
                                             ${qrEnabled ? `<button onclick="openInvoiceQrForInvoice('${inv.id}')" class="action-dropdown-item item-info"><i class="fas fa-qrcode"></i> QR Code</button>` : ''}
-                                            ${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="markAsPaid('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-check-circle"></i> Mark Paid</button>`}
+                                            ${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="openReceivePaymentModal('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-hand-holding-usd"></i> Receive Payment</button>`}
                                             <hr class="action-dropdown-divider">
                                             <button onclick="deleteInvoice('${inv.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
                                         </div>
                                     </div>
                                 </td>
                             </tr>
-                        `).join('')}
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
             `;
@@ -4494,8 +4508,21 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const container = document.getElementById('invoiceTableContainer');
             const qrEnabled = isVatTaxEnabled();
             if (container) {
-                container.innerHTML = `<table class="data-table"><thead><tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-                    ${filtered.map(inv => `<tr><td>${inv.invoiceNo}</td><td>${inv.customerName}</td><td>${inv.date}</td><td>${formatCurrency(convertCurrency(inv.total))}</td><td>${inv.status}</td><td style="text-align:center;"><div class="action-dropdown"><button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button><div class="action-dropdown-menu"><button onclick="editInvoice('${inv.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button><button onclick="printInvoiceById('${inv.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>${qrEnabled ? `<button onclick="openInvoiceQrForInvoice('${inv.id}')" class="action-dropdown-item item-info"><i class="fas fa-qrcode"></i> QR Code</button>` : ''}${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="markAsPaid('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-check-circle"></i> Mark Paid</button>`}<hr class="action-dropdown-divider"><button onclick="deleteInvoice('${inv.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button></div></div></td></tr>`).join('')}
+                container.innerHTML = `<table class="data-table"><thead><tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Total</th><th>Remaining Due</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+                    ${filtered.map(inv => {
+                        const _advP = Number(inv.advancePayment || 0);
+                        const _amtDue = Number(inv.amountDue != null ? inv.amountDue : (inv.total - _advP));
+                        const _rem = Math.max(0, _amtDue - Number(inv.paidAmount || 0));
+                        return `<tr>
+                            <td>${inv.invoiceNo}</td>
+                            <td>${inv.customerName}</td>
+                            <td>${inv.date}</td>
+                            <td>${formatCurrency(convertCurrency(inv.total, inv.currency))}</td>
+                            <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : formatCurrency(convertCurrency(_rem, inv.currency))}</td>
+                            <td><span class="status ${inv.status}">${inv.status}</span></td>
+                            <td style="text-align:center;"><div class="action-dropdown"><button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button><div class="action-dropdown-menu"><button onclick="editInvoice('${inv.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button><button onclick="printInvoiceById('${inv.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>${qrEnabled ? `<button onclick="openInvoiceQrForInvoice('${inv.id}')" class="action-dropdown-item item-info"><i class="fas fa-qrcode"></i> QR Code</button>` : ''}${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="openReceivePaymentModal('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-hand-holding-usd"></i> Receive Payment</button>`}<hr class="action-dropdown-divider"><button onclick="deleteInvoice('${inv.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button></div></div></td>
+                        </tr>`;
+                    }).join('')}
                 </tbody></table>`;
             }
         }, 250);
@@ -4559,6 +4586,141 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             }
         }
 
+        // ==================== RECEIVE PAYMENT ====================
+        let currentReceivePaymentInvoiceId = null;
+
+        function openReceivePaymentModal(invoiceId) {
+            const invoice = invoices.find(i => i.id === invoiceId);
+            if (!invoice) return;
+
+            const advancePaid = Number(invoice.advancePayment || 0);
+            const amountDue = Number(invoice.amountDue || (invoice.total - advancePaid));
+            const alreadyReceived = Number(invoice.paidAmount || 0);
+            const remaining = Math.max(0, amountDue - alreadyReceived);
+
+            if (remaining <= 0) {
+                window.APIClient?.showToast?.('This invoice is already fully paid.', 'info');
+                return;
+            }
+
+            currentReceivePaymentInvoiceId = invoiceId;
+
+            document.getElementById('rpCustomerName').textContent = invoice.customerName || '';
+            document.getElementById('rpInvoiceNo').textContent = invoice.invoiceNo || '';
+            document.getElementById('rpInvoiceTotal').innerHTML = formatCurrency(convertCurrency(invoice.total, invoice.currency));
+            document.getElementById('rpAdvancePaid').innerHTML = formatCurrency(convertCurrency(advancePaid, invoice.currency));
+            document.getElementById('rpAlreadyReceived').innerHTML = formatCurrency(convertCurrency(alreadyReceived, invoice.currency));
+            document.getElementById('rpRemainingDue').innerHTML = formatCurrency(convertCurrency(remaining, invoice.currency));
+
+            const rpAmount = document.getElementById('rpAmount');
+            rpAmount.value = '';
+            rpAmount.max = remaining;
+            rpAmount.placeholder = `Max: ${remaining.toFixed(2)}`;
+
+            document.getElementById('rpDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('rpMethod').value = 'Cash';
+            document.getElementById('rpNote').value = '';
+
+            document.getElementById('receivePaymentModal').style.display = 'flex';
+        }
+
+        function closeReceivePaymentModal() {
+            document.getElementById('receivePaymentModal').style.display = 'none';
+            currentReceivePaymentInvoiceId = null;
+        }
+
+        async function processReceivePayment() {
+            const invoice = invoices.find(i => i.id === currentReceivePaymentInvoiceId);
+            if (!invoice) return;
+
+            const advancePaid = Number(invoice.advancePayment || 0);
+            const amountDue = Number(invoice.amountDue || (invoice.total - advancePaid));
+            const alreadyReceived = Number(invoice.paidAmount || 0);
+            const remaining = Math.max(0, amountDue - alreadyReceived);
+
+            const payInput = parseFloat(document.getElementById('rpAmount').value);
+            if (!payInput || payInput <= 0) {
+                alert('Please enter a valid payment amount.');
+                return;
+            }
+            if (payInput > remaining + 0.001) {
+                alert(`Payment amount cannot exceed the remaining due (${formatCurrency(convertCurrency(remaining, invoice.currency))}).`);
+                return;
+            }
+
+            const payDate = document.getElementById('rpDate').value || new Date().toISOString().split('T')[0];
+            const payMethod = document.getElementById('rpMethod').value || 'Cash';
+            const payNote = document.getElementById('rpNote').value.trim();
+
+            const newPaidAmount = alreadyReceived + payInput;
+            const newRemaining = Math.max(0, amountDue - newPaidAmount);
+            const newStatus = newRemaining <= 0.001 ? 'Paid' : 'Partial';
+
+            invoice.paidAmount = newPaidAmount;
+            invoice.status = newStatus;
+
+            if (isApiEnabled()) {
+                try {
+                    await Promise.all([
+                        window.APIClient.postData('updateInvoice', {
+                            invoice: {
+                                id: invoice.id,
+                                invoice_no: invoice.invoiceNo,
+                                customer_id: invoice.customerId,
+                                customer_name: invoice.customerName,
+                                customer_phone: invoice.customerPhone || '',
+                                customer_email: invoice.customerEmail || '',
+                                customer_company: invoice.customerCompany || '',
+                                customer_vat: invoice.customerVatNumber || '',
+                                customer_address: invoice.customerAddress || '',
+                                date: invoice.date,
+                                due_date: invoice.dueDate,
+                                subtotal: invoice.subtotal,
+                                total: invoice.total,
+                                vat: invoice.vatRate,
+                                discount: invoice.discount,
+                                shipping: invoice.shipping,
+                                advance_payment: invoice.advancePayment,
+                                amount_due: invoice.amountDue,
+                                paid_amount: invoice.paidAmount,
+                                currency: invoice.currency,
+                                status: invoice.status,
+                                payment_method: invoice.paymentMethod || 'Cash',
+                                items: JSON.stringify(invoice.items || [])
+                            }
+                        }),
+                        window.APIClient.postData('addCustomerTransaction', {
+                            transaction: {
+                                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                                customer_id: invoice.customerId,
+                                type: 'Payment',
+                                amount: payInput,
+                                date: payDate,
+                                note: payNote || `Payment for invoice ${invoice.invoiceNo} (${payMethod})`
+                            }
+                        })
+                    ]);
+                    await refreshCustomerFinancials(invoice.customerId);
+                    window.APIClient?.showToast?.(`Payment of ${formatCurrencyPlain(convertCurrency(payInput, invoice.currency))} received. Invoice is now ${newStatus}.`, 'success');
+                } catch (error) {
+                    console.error('Receive payment API failed:', error);
+                    invoice.paidAmount = alreadyReceived;
+                    invoice.status = alreadyReceived > 0 ? 'Partial' : 'Unpaid';
+                    window.APIClient?.showToast?.('Failed to save payment. Please try again.', 'error');
+                    closeReceivePaymentModal();
+                    return;
+                }
+            } else {
+                await refreshCustomerFinancials(invoice.customerId);
+                saveData();
+                alert(`Payment of ${formatCurrencyPlain(convertCurrency(payInput, invoice.currency))} received. Invoice is now ${newStatus}.`);
+            }
+
+            closeReceivePaymentModal();
+            renderInvoiceTable();
+            updateDashboard();
+        }
+
         async function markAsPaid(id) {
             const invoice = invoices.find(i => i.id === id);
             if (invoice) {
@@ -4586,6 +4748,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                     shipping: invoice.shipping,
                                     advance_payment: invoice.advancePayment,
                                     amount_due: invoice.amountDue,
+                                    paid_amount: Number(invoice.paidAmount || 0),
                                     currency: invoice.currency,
                                     status: invoice.status,
                                     items: JSON.stringify(invoice.items || [])
