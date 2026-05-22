@@ -595,7 +595,9 @@
                 date: row.date || row.expense_date || '',
                 category: row.category || 'General',
                 description: row.description || row.title || '',
-                amount: Number(row.amount || row.total || 0)
+                amount: Number(row.amount || row.total || 0),
+                payToSupplier: row.payToSupplier || row.pay_to_supplier || '',
+                payToEmployee: row.payToEmployee || row.pay_to_employee || ''
             };
         }
 
@@ -1972,7 +1974,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     hrEmployees.map(emp => {
                         const label = `${escapeHtml(emp.id)} — ${escapeHtml(emp.name)}${emp.role ? ' (' + escapeHtml(emp.role) + ')' : ''}`;
                         const val = `${emp.id}|${emp.name}`;
-                        return `<option value="${escapeHtml(val)}" ${val === selectedEmployee ? 'selected' : ''}>${label}</option>`;
+                        return `<option value="${escapeHtml(val)}" ${val === selectedEmployee || escapeHtml(val) === selectedEmployee ? 'selected' : ''}>${label}</option>`;
                     }).join('');
             }
         }
@@ -3962,10 +3964,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             <div style="font-size: 11px; color: #666; line-height: 1.6;">
                                 <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #1a1a1a;">${escapeHtml(settings.companyName || 'Your Company')}</h3>
                                 ${normalizedCompanyAddress || '123 Business Street, City, Country'}
-                                ${(normalizedCompanyAddress && (settings.companyMobile || settings.companyEmail || settings.companyWebsite)) ? '<br>' : ''}
-                                ${settings.companyMobile ? `<i class="fas fa-phone"></i> ${escapeHtml(settings.companyMobile)}<br>` : ''}
-                                ${settings.companyEmail ? `<i class="fas fa-envelope"></i> ${escapeHtml(settings.companyEmail)}<br>` : ''}
-                                ${settings.companyWebsite ? `<i class="fas fa-globe"></i> ${escapeHtml(settings.companyWebsite)}` : ''}
+                                ${settings.companyMobile ? `<br><i class="fas fa-phone"></i> ${escapeHtml(settings.companyMobile)}` : ''}
+                                ${settings.companyEmail ? `<br><i class="fas fa-envelope"></i> ${escapeHtml(settings.companyEmail)}` : ''}
+                                ${settings.companyWebsite ? `<br><i class="fas fa-globe"></i> ${escapeHtml(settings.companyWebsite)}` : ''}
                             </div>
                         </div>
                         <div style="text-align: right; flex: 1;">
@@ -4275,10 +4276,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             <div style="font-size: 11px; color: #666; line-height: 1.6;">
                                 <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #1a1a1a;">${escapeHtml(settings.companyName || 'Your Company')}</h3>
                                 ${normalizedCompanyAddress || '123 Business Street, City, Country'}
-                                ${(normalizedCompanyAddress && (settings.companyMobile || settings.companyEmail || settings.companyWebsite)) ? '<br>' : ''}
-                                ${settings.companyMobile ? `<i class="fas fa-phone"></i> ${escapeHtml(settings.companyMobile)}<br>` : ''}
-                                ${settings.companyEmail ? `<i class="fas fa-envelope"></i> ${escapeHtml(settings.companyEmail)}<br>` : ''}
-                                ${settings.companyWebsite ? `<i class="fas fa-globe"></i> ${escapeHtml(settings.companyWebsite)}` : ''}
+                                ${settings.companyMobile ? `<br><i class="fas fa-phone"></i> ${escapeHtml(settings.companyMobile)}` : ''}
+                                ${settings.companyEmail ? `<br><i class="fas fa-envelope"></i> ${escapeHtml(settings.companyEmail)}` : ''}
+                                ${settings.companyWebsite ? `<br><i class="fas fa-globe"></i> ${escapeHtml(settings.companyWebsite)}` : ''}
                             </div>
                         </div>
                         <div style="text-align: right; flex: 1;">
