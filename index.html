@@ -2195,6 +2195,21 @@
                     <label>Amount</label>
                     <input type="number" id="expenseAmount" class="form-control" min="0" step="0.01" value="0">
                 </div>
+                <div style="margin:14px 0 8px;font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--border-color);padding-top:14px;">
+                    <i class="fas fa-user-tag" style="margin-right:6px;"></i>Pay To <span style="font-weight:400;">(Optional)</span>
+                </div>
+                <div class="form-group">
+                    <label>Supplier</label>
+                    <select id="expensePayToSupplier" class="form-control">
+                        <option value="">— Select Supplier —</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Employee</label>
+                    <select id="expensePayToEmployee" class="form-control">
+                        <option value="">— Select Employee —</option>
+                    </select>
+                </div>
             </div>
             <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:10px;padding:16px;">
                 <button onclick="closeExpenseModal()" class="btn-secondary">Cancel</button>

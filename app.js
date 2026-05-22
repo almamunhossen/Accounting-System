@@ -1823,6 +1823,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                                 <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
                                                 <div class="action-dropdown-menu">
                                                     <button onclick="editExpenseEntry('${e.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                                    <button onclick="printExpenseVoucher('${e.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print Voucher</button>
                                                     <hr class="action-dropdown-divider">
                                                     <button onclick="deleteExpenseEntry('${e.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
                                                 </div>
@@ -1837,6 +1838,145 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             `;
         }
 
+        function printExpenseVoucher(id) {
+            const e = expenses.find(x => x.id === id);
+            if (!e) return;
+
+            const settings = readStoredJson('pro_invoice_settings', {});
+            const companyName = settings.companyName || 'Company';
+            const companyAddress = settings.companyAddress || '';
+            const companyPhone = settings.companyPhone || '';
+
+            // Resolve Pay To details
+            let payToSupplierDisplay = '';
+            if (e.payToSupplier) {
+                const sup = suppliers.find(s => s.name === e.payToSupplier);
+                payToSupplierDisplay = e.payToSupplier + (sup?.company ? ` (${sup.company})` : '') + (sup?.phone ? ` | ${sup.phone}` : '');
+            }
+            let payToEmployeeDisplay = '';
+            let payToEmployeeId = '';
+            if (e.payToEmployee) {
+                const parts = e.payToEmployee.split('|');
+                payToEmployeeId = parts[0] || '';
+                const empName = parts[1] || '';
+                const emp = hrEmployees.find(x => String(x.id) === payToEmployeeId);
+                payToEmployeeDisplay = empName + (emp?.role ? ` (${emp.role})` : '');
+            }
+
+            const voucherWindow = window.open('', '_blank', 'width=860,height=760');
+            if (!voucherWindow) return;
+
+            voucherWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Payment Voucher - ${escapeHtml(e.id)}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; padding: 32px; color: #0f172a; }
+  .voucher { max-width: 720px; margin: 0 auto; background: #fff; border-radius: 18px; overflow: hidden; border: 1px solid #e2e8f0; }
+  .header { background: linear-gradient(135deg, #1e293b 0%, #dc2626 100%); color: #fff; padding: 24px 28px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .header h1 { font-size: 24px; font-weight: 700; }
+  .header p { margin-top: 4px; font-size: 13px; opacity: .85; }
+  .header .voucher-no { text-align: right; }
+  .header .voucher-no span { font-size: 12px; opacity: .8; display: block; }
+  .header .voucher-no strong { font-size: 20px; }
+  .body { padding: 24px 28px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; }
+  .field label { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+  .field span { font-size: 15px; font-weight: 600; color: #0f172a; }
+  .pay-to-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
+  .pay-to-box label { display: block; font-size: 11px; color: #16a34a; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; margin-bottom: 10px; }
+  .pay-to-row { display: flex; gap: 12px; }
+  .pay-to-row .pt-item { flex: 1; background: #fff; border: 1px solid #d1fae5; border-radius: 10px; padding: 10px 12px; }
+  .pay-to-row .pt-item span { display: block; font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .pay-to-row .pt-item strong { font-size: 13px; color: #0f172a; font-weight: 600; }
+  .pt-id { font-size: 11px !important; color: #64748b !important; font-weight: 400 !important; margin-top: 2px; }
+  .amount-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 14px; padding: 20px; text-align: center; margin-bottom: 20px; }
+  .amount-box label { display: block; font-size: 12px; color: #dc2626; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .amount-box strong { font-size: 36px; color: #991b1b; font-weight: 800; }
+  .footer { display: flex; justify-content: space-between; padding-top: 18px; margin-top: 4px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; }
+  .sig { margin-top: 32px; display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }
+  .sig div { text-align: center; }
+  .sig div span { display: block; margin-top: 28px; border-top: 1px solid #94a3b8; padding-top: 6px; }
+  @media print { body { background: #fff; padding: 0; } .voucher { border: none; box-shadow: none; } }
+</style></head><body>
+<div class="voucher">
+  <div class="header">
+    <div>
+      <h1>Payment Voucher</h1>
+      <p>${escapeHtml(companyName)}</p>
+      ${companyAddress ? `<p>${escapeHtml(companyAddress)}</p>` : ''}
+      ${companyPhone ? `<p>${escapeHtml(companyPhone)}</p>` : ''}
+    </div>
+    <div class="voucher-no">
+      <span>Voucher No</span>
+      <strong>${escapeHtml(e.id)}</strong>
+    </div>
+  </div>
+  <div class="body">
+    <div class="grid">
+      <div class="field"><label>Expense ID</label><span>${escapeHtml(e.id || '-')}</span></div>
+      <div class="field"><label>Date</label><span>${escapeHtml(e.date || '-')}</span></div>
+      <div class="field"><label>Category</label><span>${escapeHtml(e.category || 'General')}</span></div>
+      <div class="field"><label>Payment Method</label><span>Cash</span></div>
+    </div>
+    <div class="field" style="margin-bottom:16px;">
+      <label>Description</label>
+      <span style="font-size:14px;font-weight:400;line-height:1.6;">${escapeHtml(e.description || '-')}</span>
+    </div>
+    ${(payToSupplierDisplay || payToEmployeeDisplay) ? `
+    <div class="pay-to-box">
+      <label><i style="margin-right:5px;">&#10003;</i> Pay To</label>
+      <div class="pay-to-row">
+        ${payToSupplierDisplay ? `
+        <div class="pt-item">
+          <span>Supplier</span>
+          <strong>${escapeHtml(payToSupplierDisplay)}</strong>
+        </div>` : ''}
+        ${payToEmployeeDisplay ? `
+        <div class="pt-item">
+          <span>Employee</span>
+          <strong>${escapeHtml(payToEmployeeDisplay)}</strong>
+          ${payToEmployeeId ? `<div class="pt-id">ID: ${escapeHtml(payToEmployeeId)}</div>` : ''}
+        </div>` : ''}
+      </div>
+    </div>` : ''}
+    <div class="amount-box">
+      <label>Amount Paid</label>
+      <strong>${formatCurrencyPlain(convertCurrency(Number(e.amount || 0)))}</strong>
+    </div>
+    <div class="sig">
+      <div><span>Prepared By</span></div>
+      <div><span>Approved By</span></div>
+      <div><span>Received By</span></div>
+    </div>
+    <div class="footer">
+      <span>Printed: ${new Date().toLocaleString()}</span>
+      <span>${escapeHtml(companyName)}</span>
+    </div>
+  </div>
+</div>
+<script>window.onload = function(){ window.print(); };<\/script>
+</body></html>`);
+            voucherWindow.document.close();
+        }
+
+        function populateExpensePayToDropdowns(selectedSupplier = '', selectedEmployee = '') {
+            const supplierSel = document.getElementById('expensePayToSupplier');
+            const employeeSel = document.getElementById('expensePayToEmployee');
+            if (supplierSel) {
+                supplierSel.innerHTML = '<option value="">— Select Supplier —</option>' +
+                    suppliers.map(s => `<option value="${escapeHtml(s.name)}" ${s.name === selectedSupplier ? 'selected' : ''}>${escapeHtml(s.name)}${s.company ? ' (' + escapeHtml(s.company) + ')' : ''}</option>`).join('');
+            }
+            if (employeeSel) {
+                employeeSel.innerHTML = '<option value="">— Select Employee —</option>' +
+                    hrEmployees.map(emp => {
+                        const label = `${escapeHtml(emp.id)} — ${escapeHtml(emp.name)}${emp.role ? ' (' + escapeHtml(emp.role) + ')' : ''}`;
+                        const val = `${emp.id}|${emp.name}`;
+                        return `<option value="${escapeHtml(val)}" ${val === selectedEmployee ? 'selected' : ''}>${label}</option>`;
+                    }).join('');
+            }
+        }
+
         function showAddExpenseModal() {
             currentExpenseId = null;
             document.getElementById('expenseModalTitle').textContent = 'Add Expense';
@@ -1845,6 +1985,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('expenseCategory').value = 'General';
             document.getElementById('expenseDescription').value = '';
             document.getElementById('expenseAmount').value = '0';
+            populateExpensePayToDropdowns();
             document.getElementById('expenseModal').style.display = 'flex';
         }
 
@@ -1862,6 +2003,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('expenseCategory').value = entry.category || 'General';
             document.getElementById('expenseDescription').value = entry.description || '';
             document.getElementById('expenseAmount').value = entry.amount || 0;
+            populateExpensePayToDropdowns(entry.payToSupplier || '', entry.payToEmployee || '');
             document.getElementById('expenseModal').style.display = 'flex';
         }
 
@@ -1871,7 +2013,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 date: document.getElementById('expenseDate').value,
                 category: document.getElementById('expenseCategory').value || 'General',
                 description: document.getElementById('expenseDescription').value.trim(),
-                amount: Number(document.getElementById('expenseAmount').value) || 0
+                amount: Number(document.getElementById('expenseAmount').value) || 0,
+                payToSupplier: document.getElementById('expensePayToSupplier')?.value || '',
+                payToEmployee: document.getElementById('expensePayToEmployee')?.value || ''
             };
             if (!entry.date) { window.APIClient?.showToast?.('Please enter a date.', 'error'); return; }
             if (entry.amount <= 0) { window.APIClient?.showToast?.('Please enter a valid amount.', 'error'); return; }
