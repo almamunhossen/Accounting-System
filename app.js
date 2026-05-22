@@ -42,8 +42,8 @@
         let supplierPurchaseHistory = {};
         const DEFAULT_LOGO_DRIVE_FOLDER_ID = '1Lo5LEH2IUa5flRpmA11C8Y5DbU4d6u9l';
 
-        const currencySymbols = { SAR: 'SR', BDT: '৳', USD: '$' };
-        const exchangeRates = { SAR: 1, BDT: 27.5, USD: 0.27 };
+        const currencySymbols = { SAR: 'SR', BDT: '৳', USD: '$', EUR: '€' };
+        const exchangeRates = { SAR: 1, BDT: 27.5, USD: 0.27, EUR: 0.25 };
         const saudiRiyalSymbolPath = 'image/Saudi_Riyal_Symbol.svg';
         // Credentials stored as SHA-256 hashes — never keep plaintext passwords in source code.
         const ADMIN_LOGIN_USERNAME_HASH = '9d9aa0096c64e79ed3514841f62b314afc55098f646f0f3e52e7b1668b210aa9';
@@ -1536,6 +1536,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (rawSettings) writeStoredJson('pro_invoice_settings', JSON.parse(rawSettings));
             } catch (_) { /* ignore */ }
 
+            // Apply saved exchange rates immediately after loading settings
+            try {
+                const cachedSettings = readStoredJson('pro_invoice_settings', {});
+                if (cachedSettings.exchangeRateBDT > 0) exchangeRates.BDT = Number(cachedSettings.exchangeRateBDT);
+                if (cachedSettings.exchangeRateUSD > 0) exchangeRates.USD = Number(cachedSettings.exchangeRateUSD);
+                if (cachedSettings.exchangeRateEUR > 0) exchangeRates.EUR = Number(cachedSettings.exchangeRateEUR);
+            } catch (_) { /* ignore */ }
+
             const readArr = (key) => {
                 try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return Array.isArray(v) && v.length ? v : null; }
                 catch (_) { return null; }
@@ -2017,7 +2025,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 description: document.getElementById('expenseDescription').value.trim(),
                 amount: Number(document.getElementById('expenseAmount').value) || 0,
                 payToSupplier: document.getElementById('expensePayToSupplier')?.value || '',
-                payToEmployee: document.getElementById('expensePayToEmployee')?.value || ''
+                payToEmployee: document.getElementById('expensePayToEmployee')?.value || '',
+                currency: currentCurrency || 'SAR'
             };
             if (!entry.date) { window.APIClient?.showToast?.('Please enter a date.', 'error'); return; }
             if (entry.amount <= 0) { window.APIClient?.showToast?.('Please enter a valid amount.', 'error'); return; }
@@ -6959,6 +6968,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const credFields = ['adminNewUsername', 'adminCurrentPassword', 'adminNewPassword', 'adminConfirmPassword'];
             credFields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
+            // Exchange rates
+            const bdtInput = document.getElementById('exchangeRateBDT');
+            const usdInput = document.getElementById('exchangeRateUSD');
+            if (bdtInput) bdtInput.value = settings.exchangeRateBDT != null ? settings.exchangeRateBDT : exchangeRates.BDT;
+            if (usdInput) usdInput.value = settings.exchangeRateUSD != null ? settings.exchangeRateUSD : exchangeRates.USD;
+            const eurInput = document.getElementById('exchangeRateEUR');
+            if (eurInput) eurInput.value = settings.exchangeRateEUR != null ? settings.exchangeRateEUR : exchangeRates.EUR;
+
             // Sales team section
             renderSalesmen();
         }
@@ -7494,6 +7511,17 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
 
             setVatTaxEnabled(settings.vatTaxEnabled);
+
+            // Apply exchange rates immediately
+            const bdtVal = parseFloat(document.getElementById('exchangeRateBDT')?.value);
+            const usdVal = parseFloat(document.getElementById('exchangeRateUSD')?.value);
+            if (bdtVal > 0) { exchangeRates.BDT = bdtVal; settings.exchangeRateBDT = bdtVal; }
+            if (usdVal > 0) { exchangeRates.USD = usdVal; settings.exchangeRateUSD = usdVal; }
+            const eurVal = parseFloat(document.getElementById('exchangeRateEUR')?.value);
+            if (eurVal > 0) { exchangeRates.EUR = eurVal; settings.exchangeRateEUR = eurVal; }
+            writeStoredJson('pro_invoice_settings', settings);
+            try { localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); } catch(ex) {}
+
             const savedLogo = settings.companyLogo;
             if (savedLogo) {
                 const previewEl = document.getElementById('companyLogoPreview');
@@ -7534,6 +7562,18 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             updateCharts();
             if (document.getElementById('invoiceListView').style.display === 'block') renderInvoiceTable();
             if (document.getElementById('customersView').style.display === 'block') renderCustomers();
+            if (document.getElementById('expensesView').style.display === 'block') renderExpenses();
+            if (document.getElementById('reportsView').style.display === 'block') {
+                if (latestReportStats) {
+                    renderReportOverview(latestReportStats);
+                    renderReportTables(latestReportStats);
+                    renderCharts(latestReportStats);
+                    renderActiveReportTab(latestReportStats);
+                } else {
+                    filterReports();
+                }
+            }
+            if (document.getElementById('accountingView') && document.getElementById('accountingView').style.display === 'block') renderAccounting();
         }
 
         function convertCurrency(amount, fromCurrency = 'SAR') {

@@ -1624,6 +1624,13 @@
         .form-group {
             margin-bottom: 15px;
         }
+        .form-group label {
+           display: flex;
+       }
+        
+        .form-group label img {
+            margin-top: 8px;
+         }
 
         .form-group label {
             display: block;
