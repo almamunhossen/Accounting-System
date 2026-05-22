@@ -1278,7 +1278,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 window.APIClient.getData('getTasks')
             ]);
 
-            const employees = empResult.status === 'fulfilled' ? empResult.value : cachedEmployees.map(e => ({ id: e.id, name: e.name, role: e.role, department: e.department, salary: e.salary, email: e.email, mobile: e.mobile, home_address: e.homeAddress, website: e.website, profile_photo: e.profilePhoto, status: e.status, employment_type: e.employmentType, joining_date: e.joiningDate, payment_type: e.paymentType, bank_name: e.bankName, account_number: e.accountNumber, iban: e.iban, payment_method: e.paymentMethod, emergency_name: e.emergencyName, emergency_phone: e.emergencyPhone, emergency_relation: e.emergencyRelation, skills: e.skills, notes: e.notes }));
+            const employees = empResult.status === 'fulfilled' ? empResult.value : cachedEmployees.map(e => ({ id: e.id, name: e.name, role: e.role, department: e.department, salary: e.salary, email: e.email, mobile: e.mobile, home_address: e.homeAddress, website: e.website, profile_photo: e.profilePhoto, status: e.status, employment_type: e.employmentType, nid: e.nid, joining_date: e.joiningDate, payment_type: e.paymentType, bank_name: e.bankName, account_number: e.accountNumber, iban: e.iban, payment_method: e.paymentMethod, emergency_name: e.emergencyName, emergency_phone: e.emergencyPhone, emergency_relation: e.emergencyRelation, skills: e.skills, notes: e.notes }));
             const attendance = attResult.status === 'fulfilled' ? attResult.value : cachedAttendance.map(a => ({ id: a.id, employee_id: a.employeeId, date: a.date, status: a.status }));
             const leaves = leaveResult.status === 'fulfilled' ? leaveResult.value : cachedLeaves.map(l => ({ id: l.id, employee_id: l.employeeId, type: l.type, from_date: l.fromDate, to_date: l.toDate, status: l.status }));
             const tasks = taskResult.status === 'fulfilled' ? taskResult.value : cachedTasks.map(t => ({ id: t.id, title: t.title, priority: t.priority, status: t.done ? 'Completed' : 'Pending' }));
@@ -1308,6 +1308,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     profilePhoto: row.profile_photo || row.profilePhoto || '',
                     status: row.status || 'Active',
                     employmentType: row.employment_type || row.employmentType || '',
+                    nid: row.nid || '',
                     joiningDate: row.joining_date || row.joiningDate || '',
                     paymentType: row.payment_type || row.paymentType || '',
                     bankName: row.bank_name || row.bankName || '',
@@ -7991,6 +7992,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('hrEmployeeName').value = emp.name || '';
             document.getElementById('hrEmployeeStatus').value = emp.status || 'Active';
             document.getElementById('hrEmployeeType').value = emp.employmentType || '';
+            document.getElementById('hrEmployeeNid').value = emp.nid || '';
             document.getElementById('hrEmployeeRole').value = emp.role || '';
             document.getElementById('hrEmployeeDepartment').value = emp.department || '';
             document.getElementById('hrEmployeeJoiningDate').value = emp.joiningDate || '';
@@ -8032,6 +8034,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             // New fields
             const status = document.getElementById('hrEmployeeStatus')?.value || 'Active';
             const employmentType = document.getElementById('hrEmployeeType')?.value || '';
+            const nid = document.getElementById('hrEmployeeNid')?.value.trim() || '';
             const joiningDate = document.getElementById('hrEmployeeJoiningDate')?.value || '';
             const paymentType = document.getElementById('hrEmployeePaymentType')?.value || '';
             const bankName = document.getElementById('hrEmployeeBankName')?.value.trim() || '';
@@ -8077,6 +8080,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 profilePhoto,
                 status,
                 employmentType,
+                nid,
                 joiningDate,
                 paymentType,
                 bankName,
@@ -8108,6 +8112,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             profile_photo: /^https?:\/\//i.test(String(employee.profilePhoto || '')) ? employee.profilePhoto : '',
                             status: employee.status,
                             employment_type: employee.employmentType,
+                            nid: employee.nid,
                             joining_date: employee.joiningDate,
                             payment_type: employee.paymentType,
                             bank_name: employee.bankName,
