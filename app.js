@@ -3799,6 +3799,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             updateQuotationPreview();
         }
 
+        function updateInvoiceCurrency() {
+            const sel = document.getElementById('invoiceCurrencySelect');
+            if (sel && sel.value) currentCurrency = sel.value;
+            // Keep the floating panel in sync
+            document.querySelectorAll('.currency-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.currency === currentCurrency);
+            });
+            updateTotals();
+        }
+
         function updateTotals() {
             const items = getItemsFromInputs();
             const rateOptions = getInvoiceRateOptions();
@@ -3829,6 +3839,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('productDiscountTotal').innerHTML = formatCurrency(convertCurrency(discountTotal));
             document.getElementById('productVatTotal').innerHTML = formatCurrency(convertCurrency(vatTotal));
             document.getElementById('productGrandTotal').innerHTML = formatCurrency(convertCurrency(totalWithShipping));
+
+            // Update unit-price column header to reflect active currency
+            const sym = { SAR: 'SR', BDT: '৳', USD: '$', EUR: '€' }[currentCurrency] || currentCurrency;
+            const hdr = document.getElementById('invoiceUnitPriceHeader');
+            if (hdr) hdr.textContent = `Unit Price (${sym})`;
 
             window.currentSubtotal = subtotal;
             window.currentVatTotal = vatTotal;
@@ -4414,7 +4429,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 amountDue: window.currentAmountDue || 0,
                 timestamp: window.currentInvoiceTimestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
                 status: currentEditingInvoiceId ? (invoices.find(i => i.id === currentEditingInvoiceId)?.status || 'Unpaid') : 'Unpaid',
-                currency: currentCurrency
+                currency: (document.getElementById('invoiceCurrencySelect')?.value) || currentCurrency
             };
             const isEditing = !!currentEditingInvoiceId;
 
@@ -4703,6 +4718,12 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 document.getElementById('advancePaymentInput').value = invoice.advancePayment || 0;
                 const pmSelect = document.getElementById('paymentMethodInput');
                 if (pmSelect) pmSelect.value = invoice.paymentMethod || 'Cash';
+                // Restore saved currency for this invoice
+                const currSel = document.getElementById('invoiceCurrencySelect');
+                if (currSel) {
+                    currSel.value = invoice.currency || currentCurrency || 'SAR';
+                    currentCurrency = currSel.value;
+                }
                 window.currentInvoiceTimestamp = invoice.timestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
                 const itemsContainer = document.getElementById('invoiceItemsTableBody');
                 if (itemsContainer) {
@@ -7560,10 +7581,16 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
             updateDashboard();
             updateCharts();
-            if (document.getElementById('invoiceListView').style.display === 'block') renderInvoiceTable();
-            if (document.getElementById('customersView').style.display === 'block') renderCustomers();
-            if (document.getElementById('expensesView').style.display === 'block') renderExpenses();
-            if (document.getElementById('reportsView').style.display === 'block') {
+            const _vis = id => document.getElementById(id)?.style.display === 'block';
+            if (_vis('invoiceListView'))  renderInvoiceTable();
+            if (_vis('customersView'))    renderCustomers();
+            if (_vis('suppliersView'))    renderSuppliers();
+            if (_vis('expensesView'))     renderExpenses();
+            if (_vis('quotationsView'))   renderQuotations();
+            if (_vis('productsView'))     renderProducts();
+            if (_vis('hrView'))           renderHRData();
+            if (_vis('accountingView'))   renderAccounting();
+            if (_vis('reportsView')) {
                 if (latestReportStats) {
                     renderReportOverview(latestReportStats);
                     renderReportTables(latestReportStats);
@@ -7573,25 +7600,29 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     filterReports();
                 }
             }
-            if (document.getElementById('accountingView') && document.getElementById('accountingView').style.display === 'block') renderAccounting();
         }
 
         function convertCurrency(amount, fromCurrency = 'SAR') {
-            if (fromCurrency !== 'SAR') {
-                amount = amount / exchangeRates[fromCurrency];
+            const num = isFinite(Number(amount)) ? Number(amount) : 0;
+            const toRate = exchangeRates[currentCurrency] || 1;
+            if (fromCurrency && fromCurrency !== 'SAR' && exchangeRates[fromCurrency]) {
+                return (num / exchangeRates[fromCurrency]) * toRate;
             }
-            return amount * exchangeRates[currentCurrency];
+            return num * toRate;
         }
 
         function formatCurrencyPlain(amount) {
-            return `${currencySymbols[currentCurrency]} ${amount.toFixed(2)}`;
+            const num = isFinite(Number(amount)) ? Number(amount) : 0;
+            const sym = currencySymbols[currentCurrency] || currentCurrency;
+            return `${sym} ${num.toFixed(2)}`;
         }
 
         function formatCurrency(amount) {
+            const num = isFinite(Number(amount)) ? Number(amount) : 0;
             if (currentCurrency === 'SAR') {
-                return `<span style="display:inline-flex;align-items:center;gap:6px;"><img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> <span>${amount.toFixed(2)}</span></span>`;
+                return `<span style="display:inline-flex;align-items:center;gap:6px;"><img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> <span>${num.toFixed(2)}</span></span>`;
             }
-            return formatCurrencyPlain(amount);
+            return formatCurrencyPlain(num);
         }
 
         function toggleDarkMode() {
@@ -7755,6 +7786,10 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 
                 // Reset invoice number
                 generateInvoiceNumber();
+
+                // Sync currency selector to current global currency
+                const currSel = document.getElementById('invoiceCurrencySelect');
+                if (currSel) currSel.value = currentCurrency;
                 
                 // Repopulate customer select
                 renderCustomerSelect();
