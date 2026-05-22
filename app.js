@@ -1278,7 +1278,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 window.APIClient.getData('getTasks')
             ]);
 
-            const employees = empResult.status === 'fulfilled' ? empResult.value : cachedEmployees.map(e => ({ id: e.id, name: e.name, role: e.role, department: e.department, salary: e.salary, email: e.email, mobile: e.mobile, home_address: e.homeAddress, website: e.website, profile_photo: e.profilePhoto }));
+            const employees = empResult.status === 'fulfilled' ? empResult.value : cachedEmployees.map(e => ({ id: e.id, name: e.name, role: e.role, department: e.department, salary: e.salary, email: e.email, mobile: e.mobile, home_address: e.homeAddress, website: e.website, profile_photo: e.profilePhoto, status: e.status, employment_type: e.employmentType, joining_date: e.joiningDate, payment_type: e.paymentType, bank_name: e.bankName, account_number: e.accountNumber, iban: e.iban, payment_method: e.paymentMethod, emergency_name: e.emergencyName, emergency_phone: e.emergencyPhone, emergency_relation: e.emergencyRelation, skills: e.skills, notes: e.notes }));
             const attendance = attResult.status === 'fulfilled' ? attResult.value : cachedAttendance.map(a => ({ id: a.id, employee_id: a.employeeId, date: a.date, status: a.status }));
             const leaves = leaveResult.status === 'fulfilled' ? leaveResult.value : cachedLeaves.map(l => ({ id: l.id, employee_id: l.employeeId, type: l.type, from_date: l.fromDate, to_date: l.toDate, status: l.status }));
             const tasks = taskResult.status === 'fulfilled' ? taskResult.value : cachedTasks.map(t => ({ id: t.id, title: t.title, priority: t.priority, status: t.done ? 'Completed' : 'Pending' }));
@@ -1305,7 +1305,20 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     mobile: row.mobile || '',
                     homeAddress: row.home_address || row.homeAddress || '',
                     website: row.website || '',
-                    profilePhoto: row.profile_photo || row.profilePhoto || ''
+                    profilePhoto: row.profile_photo || row.profilePhoto || '',
+                    status: row.status || 'Active',
+                    employmentType: row.employment_type || row.employmentType || '',
+                    joiningDate: row.joining_date || row.joiningDate || '',
+                    paymentType: row.payment_type || row.paymentType || '',
+                    bankName: row.bank_name || row.bankName || '',
+                    accountNumber: row.account_number || row.accountNumber || '',
+                    iban: row.iban || '',
+                    paymentMethod: row.payment_method || row.paymentMethod || '',
+                    emergencyName: row.emergency_name || row.emergencyName || '',
+                    emergencyPhone: row.emergency_phone || row.emergencyPhone || '',
+                    emergencyRelation: row.emergency_relation || row.emergencyRelation || '',
+                    skills: row.skills || '',
+                    notes: row.notes || ''
                 }));
             }
 
@@ -7976,13 +7989,26 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             currentEmployeePhoto = emp.profilePhoto || '';
             document.getElementById('hrEmployeeId').value = emp.id;
             document.getElementById('hrEmployeeName').value = emp.name || '';
+            document.getElementById('hrEmployeeStatus').value = emp.status || 'Active';
+            document.getElementById('hrEmployeeType').value = emp.employmentType || '';
             document.getElementById('hrEmployeeRole').value = emp.role || '';
             document.getElementById('hrEmployeeDepartment').value = emp.department || '';
+            document.getElementById('hrEmployeeJoiningDate').value = emp.joiningDate || '';
+            document.getElementById('hrEmployeePaymentType').value = emp.paymentType || '';
             document.getElementById('hrEmployeeSalary').value = emp.salary || '';
             document.getElementById('hrEmployeeEmail').value = emp.email || '';
             document.getElementById('hrEmployeeMobile').value = emp.mobile || '';
             document.getElementById('hrEmployeeWebsite').value = emp.website || '';
             document.getElementById('hrEmployeeHomeAddress').value = emp.homeAddress || '';
+            document.getElementById('hrEmployeeBankName').value = emp.bankName || '';
+            document.getElementById('hrEmployeeAccountNumber').value = emp.accountNumber || '';
+            document.getElementById('hrEmployeeIban').value = emp.iban || '';
+            document.getElementById('hrEmployeePaymentMethod').value = emp.paymentMethod || '';
+            document.getElementById('hrEmergencyName').value = emp.emergencyName || '';
+            document.getElementById('hrEmergencyPhone').value = emp.emergencyPhone || '';
+            document.getElementById('hrEmergencyRelation').value = emp.emergencyRelation || '';
+            document.getElementById('hrEmployeeSkills').value = emp.skills || '';
+            document.getElementById('hrEmployeeNotes').value = emp.notes || '';
             const titleEl = document.getElementById('employeeModalTitle');
             if (titleEl) titleEl.textContent = 'Edit Employee';
             const photoInput = document.getElementById('hrEmployeePhoto');
@@ -8003,6 +8029,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const mobile = document.getElementById('hrEmployeeMobile')?.value.trim() || '';
             const homeAddress = document.getElementById('hrEmployeeHomeAddress')?.value.trim() || '';
             const website = document.getElementById('hrEmployeeWebsite')?.value.trim() || '';
+            // New fields
+            const status = document.getElementById('hrEmployeeStatus')?.value || 'Active';
+            const employmentType = document.getElementById('hrEmployeeType')?.value || '';
+            const joiningDate = document.getElementById('hrEmployeeJoiningDate')?.value || '';
+            const paymentType = document.getElementById('hrEmployeePaymentType')?.value || '';
+            const bankName = document.getElementById('hrEmployeeBankName')?.value.trim() || '';
+            const accountNumber = document.getElementById('hrEmployeeAccountNumber')?.value.trim() || '';
+            const iban = document.getElementById('hrEmployeeIban')?.value.trim() || '';
+            const paymentMethod = document.getElementById('hrEmployeePaymentMethod')?.value || '';
+            const emergencyName = document.getElementById('hrEmergencyName')?.value.trim() || '';
+            const emergencyPhone = document.getElementById('hrEmergencyPhone')?.value.trim() || '';
+            const emergencyRelation = document.getElementById('hrEmergencyRelation')?.value.trim() || '';
+            const skills = document.getElementById('hrEmployeeSkills')?.value.trim() || '';
+            const notes = document.getElementById('hrEmployeeNotes')?.value.trim() || '';
             const settings = readStoredJson('pro_invoice_settings', {});
             const logoDriveFolderId = String(settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID).trim() || DEFAULT_LOGO_DRIVE_FOLDER_ID;
 
@@ -8034,7 +8074,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 mobile,
                 homeAddress,
                 website,
-                profilePhoto
+                profilePhoto,
+                status,
+                employmentType,
+                joiningDate,
+                paymentType,
+                bankName,
+                accountNumber,
+                iban,
+                paymentMethod,
+                emergencyName,
+                emergencyPhone,
+                emergencyRelation,
+                skills,
+                notes
             };
 
             if (isApiEnabled()) {
@@ -8052,7 +8105,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             home_address: employee.homeAddress,
                             website: employee.website,
                             // Only store Drive/HTTP URLs in Google Sheets - never base64 (too large, gets truncated)
-                            profile_photo: /^https?:\/\//i.test(String(employee.profilePhoto || '')) ? employee.profilePhoto : ''
+                            profile_photo: /^https?:\/\//i.test(String(employee.profilePhoto || '')) ? employee.profilePhoto : '',
+                            status: employee.status,
+                            employment_type: employee.employmentType,
+                            joining_date: employee.joiningDate,
+                            payment_type: employee.paymentType,
+                            bank_name: employee.bankName,
+                            account_number: employee.accountNumber,
+                            iban: employee.iban,
+                            payment_method: employee.paymentMethod,
+                            emergency_name: employee.emergencyName,
+                            emergency_phone: employee.emergencyPhone,
+                            emergency_relation: employee.emergencyRelation,
+                            skills: employee.skills,
+                            notes: employee.notes
                         }
                     });
                     // Optimistic update
@@ -8196,25 +8262,42 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                                 <tr>
                                     <th>Employee ID</th>
                                     <th>Name</th>
-                                    <th>Role</th>
-                                    <th>Department</th>
+                                    <th>Role / Dept</th>
+                                    <th>Type / Payment</th>
+                                    <th>Joining Date</th>
                                     <th>Contact</th>
                                     <th>Salary</th>
+                                    <th>Status</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${hrEmployees.map(emp => `
+                                ${hrEmployees.map(emp => {
+                                    const statusColors = { Active: '#28a745', Inactive: '#6c757d', 'On Leave': '#ffc107' };
+                                    const statusColor = statusColors[emp.status] || '#6c757d';
+                                    const typeColors = { Permanent: '#4a90e2', 'Part-time': '#fd7e14', Freelance: '#6f42c1' };
+                                    const typeColor = typeColors[emp.employmentType] || 'var(--text-secondary)';
+                                    const skillTags = (emp.skills || '').split(',').map(s => s.trim()).filter(Boolean);
+                                    return `
                                     <tr>
                                         <td class="supplier-id-cell">${escapeHtml(emp.id || '-')}</td>
                                         <td>
                                             <div class="supplier-primary-text">${escapeHtml(emp.name || '-')}</div>
                                             <div class="supplier-secondary-text">${escapeHtml(emp.email || '-')}</div>
+                                            ${skillTags.length ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">${skillTags.slice(0,3).map(t => `<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:var(--bg-secondary);color:var(--text-secondary);">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
                                         </td>
-                                        <td>${escapeHtml(emp.role || '-')}</td>
-                                        <td>${escapeHtml(emp.department || '-')}</td>
+                                        <td>
+                                            <div class="supplier-primary-text">${escapeHtml(emp.role || '-')}</div>
+                                            <div class="supplier-secondary-text">${escapeHtml(emp.department || '-')}</div>
+                                        </td>
+                                        <td>
+                                            ${emp.employmentType ? `<span style="font-size:11px;font-weight:600;color:${typeColor};">${escapeHtml(emp.employmentType)}</span>` : '<span style="color:var(--text-secondary)">-</span>'}
+                                            ${emp.paymentType ? `<div class="supplier-secondary-text">${escapeHtml(emp.paymentType)}</div>` : ''}
+                                        </td>
+                                        <td>${escapeHtml(emp.joiningDate || '-')}</td>
                                         <td>${escapeHtml(emp.mobile || '-')}</td>
                                         <td>${formatCurrency(convertCurrency(emp.salary || 0))}</td>
+                                        <td><span style="font-size:11px;font-weight:600;color:${statusColor};">${escapeHtml(emp.status || 'Active')}</span></td>
                                         <td>
                                             <div class="action-dropdown">
                                                 <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
@@ -8226,8 +8309,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                                                 </div>
                                             </div>
                                         </td>
-                                    </tr>
-                                `).join('')}
+                                    </tr>`;
+                                }).join('')}
                             </tbody>
                         </table>
                     </div>
