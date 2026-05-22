@@ -1278,7 +1278,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 window.APIClient.getData('getTasks')
             ]);
 
-            const employees = empResult.status === 'fulfilled' ? empResult.value : cachedEmployees.map(e => ({ id: e.id, name: e.name, role: e.role, department: e.department, salary: e.salary, email: e.email, mobile: e.mobile, home_address: e.homeAddress, website: e.website, profile_photo: e.profilePhoto, status: e.status, employment_type: e.employmentType, nid: e.nid, joining_date: e.joiningDate, payment_type: e.paymentType, bank_name: e.bankName, account_number: e.accountNumber, iban: e.iban, payment_method: e.paymentMethod, emergency_name: e.emergencyName, emergency_phone: e.emergencyPhone, emergency_relation: e.emergencyRelation, skills: e.skills, notes: e.notes }));
+            const employees = empResult.status === 'fulfilled' ? empResult.value : cachedEmployees.map(e => ({ id: e.id, name: e.name, role: e.role, department: e.department, salary: e.salary, email: e.email, mobile: e.mobile, home_address: e.homeAddress, website: e.website, profile_photo: e.profilePhoto, status: e.status, employment_type: e.employmentType, nid: e.nid, dob: e.dob, gender: e.gender, nationality: e.nationality, blood_group: e.bloodGroup, joining_date: e.joiningDate, payment_type: e.paymentType, contract_end: e.contractEnd, work_location: e.workLocation, notice_period: e.noticePeriod, iqama: e.iqama, iqama_expiry: e.iqamaExpiry, passport: e.passport, passport_expiry: e.passportExpiry, visa_type: e.visaType, bank_name: e.bankName, account_number: e.accountNumber, iban: e.iban, payment_method: e.paymentMethod, emergency_name: e.emergencyName, emergency_phone: e.emergencyPhone, emergency_relation: e.emergencyRelation, skills: e.skills, notes: e.notes }));
             const attendance = attResult.status === 'fulfilled' ? attResult.value : cachedAttendance.map(a => ({ id: a.id, employee_id: a.employeeId, date: a.date, status: a.status }));
             const leaves = leaveResult.status === 'fulfilled' ? leaveResult.value : cachedLeaves.map(l => ({ id: l.id, employee_id: l.employeeId, type: l.type, from_date: l.fromDate, to_date: l.toDate, status: l.status }));
             const tasks = taskResult.status === 'fulfilled' ? taskResult.value : cachedTasks.map(t => ({ id: t.id, title: t.title, priority: t.priority, status: t.done ? 'Completed' : 'Pending' }));
@@ -1309,8 +1309,20 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     status: row.status || 'Active',
                     employmentType: row.employment_type || row.employmentType || '',
                     nid: row.nid || '',
+                    dob: row.dob || '',
+                    gender: row.gender || '',
+                    nationality: row.nationality || '',
+                    bloodGroup: row.blood_group || row.bloodGroup || '',
                     joiningDate: row.joining_date || row.joiningDate || '',
                     paymentType: row.payment_type || row.paymentType || '',
+                    contractEnd: row.contract_end || row.contractEnd || '',
+                    workLocation: row.work_location || row.workLocation || '',
+                    noticePeriod: row.notice_period || row.noticePeriod || '',
+                    iqama: row.iqama || '',
+                    iqamaExpiry: row.iqama_expiry || row.iqamaExpiry || '',
+                    passport: row.passport || '',
+                    passportExpiry: row.passport_expiry || row.passportExpiry || '',
+                    visaType: row.visa_type || row.visaType || '',
                     bankName: row.bank_name || row.bankName || '',
                     accountNumber: row.account_number || row.accountNumber || '',
                     iban: row.iban || '',
@@ -7993,11 +8005,23 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             document.getElementById('hrEmployeeStatus').value = emp.status || 'Active';
             document.getElementById('hrEmployeeType').value = emp.employmentType || '';
             document.getElementById('hrEmployeeNid').value = emp.nid || '';
+            document.getElementById('hrEmployeeDob').value = emp.dob || '';
+            document.getElementById('hrEmployeeGender').value = emp.gender || '';
+            document.getElementById('hrEmployeeNationality').value = emp.nationality || '';
+            document.getElementById('hrEmployeeBloodGroup').value = emp.bloodGroup || '';
             document.getElementById('hrEmployeeRole').value = emp.role || '';
             document.getElementById('hrEmployeeDepartment').value = emp.department || '';
             document.getElementById('hrEmployeeJoiningDate').value = emp.joiningDate || '';
             document.getElementById('hrEmployeePaymentType').value = emp.paymentType || '';
             document.getElementById('hrEmployeeSalary').value = emp.salary || '';
+            document.getElementById('hrEmployeeContractEnd').value = emp.contractEnd || '';
+            document.getElementById('hrEmployeeWorkLocation').value = emp.workLocation || '';
+            document.getElementById('hrEmployeeNoticePeriod').value = emp.noticePeriod || '';
+            document.getElementById('hrEmployeeIqama').value = emp.iqama || '';
+            document.getElementById('hrEmployeeIqamaExpiry').value = emp.iqamaExpiry || '';
+            document.getElementById('hrEmployeePassport').value = emp.passport || '';
+            document.getElementById('hrEmployeePassportExpiry').value = emp.passportExpiry || '';
+            document.getElementById('hrEmployeeVisaType').value = emp.visaType || '';
             document.getElementById('hrEmployeeEmail').value = emp.email || '';
             document.getElementById('hrEmployeeMobile').value = emp.mobile || '';
             document.getElementById('hrEmployeeWebsite').value = emp.website || '';
@@ -8035,8 +8059,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const status = document.getElementById('hrEmployeeStatus')?.value || 'Active';
             const employmentType = document.getElementById('hrEmployeeType')?.value || '';
             const nid = document.getElementById('hrEmployeeNid')?.value.trim() || '';
+            const dob = document.getElementById('hrEmployeeDob')?.value || '';
+            const gender = document.getElementById('hrEmployeeGender')?.value || '';
+            const nationality = document.getElementById('hrEmployeeNationality')?.value.trim() || '';
+            const bloodGroup = document.getElementById('hrEmployeeBloodGroup')?.value || '';
             const joiningDate = document.getElementById('hrEmployeeJoiningDate')?.value || '';
             const paymentType = document.getElementById('hrEmployeePaymentType')?.value || '';
+            const contractEnd = document.getElementById('hrEmployeeContractEnd')?.value || '';
+            const workLocation = document.getElementById('hrEmployeeWorkLocation')?.value || '';
+            const noticePeriod = document.getElementById('hrEmployeeNoticePeriod')?.value || '';
+            const iqama = document.getElementById('hrEmployeeIqama')?.value.trim() || '';
+            const iqamaExpiry = document.getElementById('hrEmployeeIqamaExpiry')?.value || '';
+            const passport = document.getElementById('hrEmployeePassport')?.value.trim() || '';
+            const passportExpiry = document.getElementById('hrEmployeePassportExpiry')?.value || '';
+            const visaType = document.getElementById('hrEmployeeVisaType')?.value.trim() || '';
             const bankName = document.getElementById('hrEmployeeBankName')?.value.trim() || '';
             const accountNumber = document.getElementById('hrEmployeeAccountNumber')?.value.trim() || '';
             const iban = document.getElementById('hrEmployeeIban')?.value.trim() || '';
@@ -8081,8 +8117,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 status,
                 employmentType,
                 nid,
+                dob,
+                gender,
+                nationality,
+                bloodGroup,
                 joiningDate,
                 paymentType,
+                contractEnd,
+                workLocation,
+                noticePeriod,
+                iqama,
+                iqamaExpiry,
+                passport,
+                passportExpiry,
+                visaType,
                 bankName,
                 accountNumber,
                 iban,
@@ -8113,7 +8161,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             status: employee.status,
                             employment_type: employee.employmentType,
                             nid: employee.nid,
+                            dob: employee.dob,
+                            gender: employee.gender,
+                            nationality: employee.nationality,
+                            blood_group: employee.bloodGroup,
                             joining_date: employee.joiningDate,
+                            payment_type: employee.paymentType,
+                            contract_end: employee.contractEnd,
+                            work_location: employee.workLocation,
+                            notice_period: employee.noticePeriod,
+                            iqama: employee.iqama,
+                            iqama_expiry: employee.iqamaExpiry,
+                            passport: employee.passport,
+                            passport_expiry: employee.passportExpiry,
+                            visa_type: employee.visaType,
                             payment_type: employee.paymentType,
                             bank_name: employee.bankName,
                             account_number: employee.accountNumber,

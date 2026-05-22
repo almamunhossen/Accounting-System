@@ -2104,6 +2104,37 @@
                         </div>
                         <div class="form-group"><!-- spacer --></div>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Date of Birth</label>
+                            <input type="date" id="hrEmployeeDob">
+                        </div>
+                        <div class="form-group">
+                            <label>Gender</label>
+                            <select id="hrEmployeeGender">
+                                <option value="">-- Select --</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Nationality</label>
+                            <input type="text" id="hrEmployeeNationality" placeholder="e.g. Saudi, Bangladeshi">
+                        </div>
+                        <div class="form-group">
+                            <label>Blood Group</label>
+                            <select id="hrEmployeeBloodGroup">
+                                <option value="">-- Select --</option>
+                                <option>A+</option><option>A-</option>
+                                <option>B+</option><option>B-</option>
+                                <option>AB+</option><option>AB-</option>
+                                <option>O+</option><option>O-</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label>Profile Photo</label>
                         <input type="file" id="hrEmployeePhoto" accept="image/*" onchange="handleEmployeePhotoUpload(event)">
@@ -2150,6 +2181,61 @@
                         <div class="form-group">
                             <label>Salary / Rate</label>
                             <input type="number" id="hrEmployeeSalary" min="0" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-group"><!-- spacer --></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Contract End Date</label>
+                            <input type="date" id="hrEmployeeContractEnd">
+                        </div>
+                        <div class="form-group">
+                            <label>Work Location</label>
+                            <select id="hrEmployeeWorkLocation">
+                                <option value="">-- Select --</option>
+                                <option value="Office">Office</option>
+                                <option value="Remote">Remote</option>
+                                <option value="Hybrid">Hybrid</option>
+                                <option value="Field">Field</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Notice Period (days)</label>
+                            <input type="number" id="hrEmployeeNoticePeriod" min="0" placeholder="e.g. 30">
+                        </div>
+                        <div class="form-group"><!-- spacer --></div>
+                    </div>
+                </div>
+
+                <!-- ── Visa & Documents ── -->
+                <div class="form-section" style="margin-bottom:18px;">
+                    <h4 style="font-size:13px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;"><i class="fas fa-passport" style="margin-right:6px;"></i>Visa &amp; Documents <small style="font-weight:400;font-size:11px;color:var(--text-secondary);text-transform:none;">(KSA / International)</small></h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>IQAMA Number</label>
+                            <input type="text" id="hrEmployeeIqama" placeholder="IQAMA / Residence ID">
+                        </div>
+                        <div class="form-group">
+                            <label>IQAMA Expiry Date</label>
+                            <input type="date" id="hrEmployeeIqamaExpiry">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Passport Number</label>
+                            <input type="text" id="hrEmployeePassport" placeholder="Passport number">
+                        </div>
+                        <div class="form-group">
+                            <label>Passport Expiry Date</label>
+                            <input type="date" id="hrEmployeePassportExpiry">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Visa Type</label>
+                            <input type="text" id="hrEmployeeVisaType" placeholder="e.g. Work Visa, Visit Visa">
                         </div>
                         <div class="form-group"><!-- spacer --></div>
                     </div>
