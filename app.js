@@ -8781,7 +8781,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         ${product.supplierName ? `<div class="supplier-secondary-text">Supplier: ${escapeHtml(product.supplierName)}</div>` : ''}
                     </td>
                     <td>${escapeHtml(product.description || '-')}</td>
-                    <td>${formatCurrencyPlain(product.price || 0)}</td>
+                    <td>${formatCurrency(convertCurrency(product.price || 0))}</td>
                     <td>${parseFloat(product.tax || 0).toFixed(1)}%</td>
                     <td style="text-align:center;">
                         ${product.vatIncluded
@@ -8832,10 +8832,10 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
   <tr><th class="label">Product ID</th><td class="value">${escapeHtml(product.id || '-')}</td></tr>
   <tr><th class="label">Name</th><td class="value">${escapeHtml(product.name)}</td></tr>
   <tr><th class="label">Description</th><td class="value">${escapeHtml(product.description || '-')}</td></tr>
-  <tr><th class="label">Unit Price</th><td class="value">${formatCurrencyPlain(product.price || 0)}</td></tr>
+  <tr><th class="label">Unit Price</th><td class="value">${formatCurrencyPlain(convertCurrency(product.price || 0))}</td></tr>
   <tr><th class="label">VAT %</th><td class="value">${parseFloat(product.tax || 0).toFixed(1)}%</td></tr>
   <tr><th class="label">VAT Included</th><td class="value">${product.vatIncluded ? 'Yes' : 'No'}</td></tr>
-  <tr><th class="label">Cost</th><td class="value">${formatCurrencyPlain(product.cost || 0)}</td></tr>
+  <tr><th class="label">Cost</th><td class="value">${formatCurrencyPlain(convertCurrency(product.cost || 0))}</td></tr>
   <tr><th class="label">Supplier</th><td class="value">${escapeHtml(product.supplierName || '-')}</td></tr>
 </table>
 <script>window.onload=function(){window.print();window.close();}<\/script>
