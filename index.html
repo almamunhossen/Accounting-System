@@ -791,6 +791,15 @@
                         <span>Active Range</span>
                         <strong id="reportActiveRangeLabel">This Month</strong>
                     </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label style="font-size:12px;">Currency</label>
+                        <select id="reportCurrencySelect" onchange="setReportCurrency(this.value)" style="font-weight:600;min-width:120px;">
+                            <option value="SAR">&#xFDFC; SAR</option>
+                            <option value="BDT">&#x09F3; BDT</option>
+                            <option value="USD">$ USD</option>
+                            <option value="EUR">&euro; EUR</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Report Tab Navigation -->

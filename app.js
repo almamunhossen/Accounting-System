@@ -5302,6 +5302,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
             document.getElementById('reportsView').style.display = 'block';
             setActiveNav('navReports');
+            // Sync report currency selector to current global currency
+            const repSel = document.getElementById('reportCurrencySelect');
+            if (repSel) repSel.value = currentCurrency;
             await loadReports();
         }
 
@@ -7570,9 +7573,24 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         }
 
         // ==================== CURRENCY & DARK MODE ====================
+        function setReportCurrency(currency) {
+            currentCurrency = currency;
+            // Keep floating panel buttons in sync
+            document.querySelectorAll('.currency-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.currency === currency);
+            });
+            // Also keep invoice form selector in sync
+            const invSel = document.getElementById('invoiceCurrencySelect');
+            if (invSel) invSel.value = currency;
+            filterReports();
+        }
+
         function setCurrency(currency, button) {
             currentCurrency = currency;
             document.querySelectorAll('.currency-btn').forEach(btn => btn.classList.remove('active'));
+            // Sync report currency selector
+            const repSel = document.getElementById('reportCurrencySelect');
+            if (repSel) repSel.value = currency;
             if (button && button.classList) {
                 button.classList.add('active');
             } else {
@@ -7591,14 +7609,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (_vis('hrView'))           renderHRData();
             if (_vis('accountingView'))   renderAccounting();
             if (_vis('reportsView')) {
-                if (latestReportStats) {
-                    renderReportOverview(latestReportStats);
-                    renderReportTables(latestReportStats);
-                    renderCharts(latestReportStats);
-                    renderActiveReportTab(latestReportStats);
-                } else {
-                    filterReports();
-                }
+                filterReports();
             }
         }
 
