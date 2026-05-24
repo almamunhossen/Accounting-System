@@ -8185,7 +8185,6 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             passport: employee.passport,
                             passport_expiry: employee.passportExpiry,
                             visa_type: employee.visaType,
-                            payment_type: employee.paymentType,
                             bank_name: employee.bankName,
                             account_number: employee.accountNumber,
                             iban: employee.iban,
@@ -8542,6 +8541,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             currentLeaveId = null;
             const employeeField = document.getElementById('hrLeaveEmployee');
             const typeField = document.getElementById('hrLeaveType');
+            const statusField = document.getElementById('hrLeaveStatus');
             const fromField = document.getElementById('hrLeaveFrom');
             const toField = document.getElementById('hrLeaveTo');
             const submitBtn = document.getElementById('hrLeaveSubmitBtn');
@@ -8549,6 +8549,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
             if (employeeField) employeeField.value = '';
             if (typeField) typeField.value = 'Annual';
+            if (statusField) statusField.value = 'Pending';
             if (fromField) fromField.value = '';
             if (toField) toField.value = '';
             if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-calendar-plus"></i> Add Leave';
@@ -8562,6 +8563,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             currentLeaveId = id;
             document.getElementById('hrLeaveEmployee').value = leave.employeeId || '';
             document.getElementById('hrLeaveType').value = leave.type || 'Annual';
+            const hrLeaveStatusEl = document.getElementById('hrLeaveStatus');
+            if (hrLeaveStatusEl) hrLeaveStatusEl.value = leave.status || 'Pending';
             document.getElementById('hrLeaveFrom').value = leave.fromDate || '';
             document.getElementById('hrLeaveTo').value = leave.toDate || '';
 
@@ -8582,13 +8585,14 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return;
             }
 
+            const status = document.getElementById('hrLeaveStatus')?.value || 'Pending';
             const leave = {
                 id: currentLeaveId || Date.now().toString(),
                 employeeId,
                 type,
                 fromDate,
                 toDate,
-                status: 'Pending'
+                status
             };
 
             if (isApiEnabled()) {
@@ -8673,12 +8677,60 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         function renderHRLeaves() {
             const container = document.getElementById('hrLeaveList');
             if (!container) return;
-            const rows = hrLeaves.slice().sort((a, b) => b.fromDate.localeCompare(a.fromDate)).slice(0, 10);
+            const rows = hrLeaves.slice().sort((a, b) => b.fromDate.localeCompare(a.fromDate));
+
+            const statusColors = { Pending: '#b45309', Approved: '#15803d', Rejected: '#b91c1c' };
+            const statusBg    = { Pending: '#fef3c7', Approved: '#dcfce7', Rejected: '#fee2e2' };
 
             container.innerHTML = rows.map(row => {
                 const emp = hrEmployees.find(e => e.id === row.employeeId);
-                return `<div class="report-list-item"><span>${escapeHtml(emp?.name || 'Unknown')} - ${escapeHtml(row.type)} (${escapeHtml(row.fromDate)} to ${escapeHtml(row.toDate)})</span><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><strong>${escapeHtml(row.status)}</strong><button onclick="editHRLeave('${row.id}')" class="btn-icon"><i class="fas fa-edit"></i> Edit</button><button onclick="deleteHRLeave('${row.id}')" class="btn-icon" style="background:#fee2e2;color:#b91c1c;"><i class="fas fa-trash"></i> Delete</button></div></div>`;
+                const color = statusColors[row.status] || '#6b7280';
+                const bg    = statusBg[row.status]    || '#f3f4f6';
+                const approveRejectBtns = row.status === 'Pending'
+                    ? `<button onclick="updateLeaveStatus('${row.id}','Approved')" class="btn-icon" style="background:#dcfce7;color:#15803d;"><i class="fas fa-check"></i> Approve</button>
+                       <button onclick="updateLeaveStatus('${row.id}','Rejected')" class="btn-icon" style="background:#fee2e2;color:#b91c1c;"><i class="fas fa-times"></i> Reject</button>`
+                    : '';
+                return `<div class="report-list-item">
+                    <span>${escapeHtml(emp?.name || 'Unknown')} — ${escapeHtml(row.type)} (${escapeHtml(row.fromDate)} to ${escapeHtml(row.toDate)})</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:12px;background:${bg};color:${color};">${escapeHtml(row.status)}</span>
+                        ${approveRejectBtns}
+                        <button onclick="editHRLeave('${row.id}')" class="btn-icon"><i class="fas fa-edit"></i> Edit</button>
+                        <button onclick="deleteHRLeave('${row.id}')" class="btn-icon" style="background:#fee2e2;color:#b91c1c;"><i class="fas fa-trash"></i> Delete</button>
+                    </div>
+                </div>`;
             }).join('') || '<p>No leave requests.</p>';
+        }
+
+        async function updateLeaveStatus(id, newStatus) {
+            const leave = hrLeaves.find(l => l.id === id);
+            if (!leave) return;
+            const prevStatus = leave.status;
+            leave.status = newStatus;
+            if (isApiEnabled()) {
+                try {
+                    await window.APIClient.postData('updateLeave', {
+                        leave: {
+                            id: leave.id,
+                            employee_id: leave.employeeId,
+                            type: leave.type,
+                            from_date: leave.fromDate,
+                            to_date: leave.toDate,
+                            status: newStatus
+                        }
+                    });
+                    window.APIClient?.showToast?.(`Leave ${newStatus.toLowerCase()} successfully`, 'success');
+                } catch (error) {
+                    leave.status = prevStatus;
+                    console.error('Leave status update failed:', error);
+                    window.APIClient?.showToast?.('Failed to update leave status: ' + (error?.message || error), 'error');
+                    renderHRData();
+                    return;
+                }
+            } else {
+                saveData();
+            }
+            renderHRData();
         }
 
         async function addHRTask() {
