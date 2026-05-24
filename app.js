@@ -1367,6 +1367,15 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         // ==================== INITIALIZATION ====================
         document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const savedCurrency = localStorage.getItem('pro_invoice_currency');
+                if (savedCurrency) {
+                    currentCurrency = savedCurrency;
+                    document.querySelectorAll('.currency-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.currency === savedCurrency);
+                    });
+                }
+            } catch(e) {}
             applySidebarBranding();
             updateLoginSecurityUi();
             setInterval(updateLoginSecurityUi, 1000);
@@ -7613,6 +7622,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
         function setCurrency(currency, button) {
             currentCurrency = currency;
+            try { localStorage.setItem('pro_invoice_currency', currency); } catch(e) {}
             document.querySelectorAll('.currency-btn').forEach(btn => btn.classList.remove('active'));
             // Sync report currency selector
             const repSel = document.getElementById('reportCurrencySelect');
