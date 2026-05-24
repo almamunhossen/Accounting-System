@@ -8943,6 +8943,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
                             <div class="action-dropdown-menu">
                                 <button onclick="editProduct('${product.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button>
+                                <button onclick="duplicateProduct('${product.id}')" class="action-dropdown-item"><i class="fas fa-copy"></i> Duplicate</button>
                                 <button onclick="printProduct('${product.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>
                                 <hr class="action-dropdown-divider">
                                 <button onclick="deleteProduct('${product.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button>
@@ -8990,6 +8991,51 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 <script>window.onload=function(){window.print();window.close();}<\/script>
 </body></html>`);
             w.document.close();
+        }
+
+        async function duplicateProduct(id) {
+            const source = savedProducts.find(p => String(p.id) === String(id));
+            if (!source) return;
+            const newProduct = {
+                id: generateProductCode(),
+                name: source.name + ' (Copy)',
+                description: source.description || '',
+                price: source.price || 0,
+                tax: source.tax || 0,
+                supplierId: source.supplierId || '',
+                supplierName: source.supplierName || '',
+                cost: source.cost || 0,
+                vatIncluded: source.vatIncluded || false,
+                dontUpdateQty: source.dontUpdateQty || false
+            };
+            if (isApiEnabled()) {
+                try {
+                    await window.APIClient.postData('addProduct', {
+                        product: {
+                            id: newProduct.id,
+                            name: newProduct.name,
+                            description: newProduct.description,
+                            price: newProduct.price,
+                            vat: newProduct.tax,
+                            supplier_id: newProduct.supplierId,
+                            supplier_name: newProduct.supplierName,
+                            cost: newProduct.cost,
+                            vat_included: String(newProduct.vatIncluded),
+                            dont_update_qty: String(newProduct.dontUpdateQty)
+                        }
+                    });
+                    savedProducts.push(newProduct);
+                    updateSavedProductsDatalist();
+                    renderProducts();
+                    refreshSupplierCardsIfVisible();
+                    window.APIClient?.showToast?.('Product duplicated successfully', 'success');
+                } catch (error) {
+                    console.error('Error duplicating product:', error);
+                    window.APIClient?.showToast?.('Failed to duplicate product. Please try again.', 'error');
+                }
+            } else {
+                alert('API is offline. Product changes are not stored locally; reconnect to duplicate in Google Sheets.');
+            }
         }
 
         async function deleteProduct(id) {
