@@ -1180,8 +1180,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         async function syncSuppliersFromApi() {
-            const rows = await window.APIClient.getData('getSuppliers');
-            suppliers = rows.map(normalizeSupplierFromApi);
+            try {
+                const rows = await window.APIClient.getData('getSuppliers');
+                suppliers = rows.map(normalizeSupplierFromApi);
+            } catch (error) {
+                const msg = String(error?.message || '');
+                if (/Unknown action:\s*getSuppliers/i.test(msg)) {
+                    // getSuppliers not yet deployed — keep existing local data
+                    return;
+                }
+                throw error;
+            }
         }
 
         async function syncInvoicesFromApi() {
@@ -1510,7 +1519,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function saveData() {
-            // Data persistence is handled by Google Sheets API only.
+            // Persist the current in-memory state to localStorage so data survives
+            // page refresh even when the Google Sheets API is unavailable or an action
+            // is not yet deployed on the Apps Script side.
+            saveApiCache();
         }
 
         // ---- localStorage cache for instant UI on next page load ----
