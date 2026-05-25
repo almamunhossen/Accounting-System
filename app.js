@@ -8155,7 +8155,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (isApiEnabled()) {
                 try {
                     const action = window.currentEmployeeId ? 'updateEmployee' : 'addEmployee';
-                    await window.APIClient.postData(action, {
+                    const apiResult = await window.APIClient.postData(action, {
                         employee: {
                             id: employee.id,
                             name: employee.name,
@@ -8196,7 +8196,15 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             notes: employee.notes
                         }
                     });
-                    // Optimistic update
+                    // If the server assigned a different ID (e.g. sequential EMP-0001 instead of
+                    // the locally-generated EMP-2001), update the local employee to match Google Sheets.
+                    const serverData = apiResult?.data || apiResult;
+                    const serverAssignedId = String(serverData?.id || '').trim();
+                    if (serverAssignedId && serverAssignedId !== employee.id) {
+                        employee.id = serverAssignedId;
+                    }
+                    // Optimistic update — also honour any server-assigned ID (e.g. if Apps Script
+                    // changed EMP-2001 → EMP-0001) so local state stays in sync with Google Sheets.
                     if (window.currentEmployeeId) {
                         const idx = hrEmployees.findIndex(e => e.id === window.currentEmployeeId);
                         if (idx !== -1) hrEmployees[idx] = employee;
