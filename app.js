@@ -2629,16 +2629,16 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         function calculateCustomerFinancials(customerId) {
             const customerInvoices = invoices.filter(inv => String(inv.customerId || '') === String(customerId || ''));
-            const totalPurchase = customerInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+            const totalPurchase = customerInvoices.reduce((sum, inv) => sum + convertAmountToSAR(Number(inv.total || 0), inv.currency || 'SAR'), 0);
             const totalPaid = customerInvoices.reduce((sum, inv) => {
-                const advance = Number(inv.advancePayment || 0);
-                const received = Number(inv.paidAmount || 0);
+                const advance = convertAmountToSAR(Number(inv.advancePayment || 0), inv.currency || 'SAR');
+                const received = convertAmountToSAR(Number(inv.paidAmount || 0), inv.currency || 'SAR');
                 return sum + advance + received;
             }, 0);
             const dueAmount = Math.max(customerInvoices.reduce((sum, inv) => {
-                const amountDue = Number(inv.amountDue != null ? inv.amountDue : (inv.total - Number(inv.advancePayment || 0)));
-                const received = Number(inv.paidAmount || 0);
-                return sum + Math.max(0, amountDue - received);
+                const amountDue = Number(inv.amountDue != null ? inv.amountDue : (Number(inv.total || 0) - Number(inv.advancePayment || 0)));
+                const paid = Number(inv.paidAmount || 0);
+                return sum + Math.max(0, convertAmountToSAR(amountDue, inv.currency || 'SAR') - convertAmountToSAR(paid, inv.currency || 'SAR'));
             }, 0), 0);
             const orderCount = customerInvoices.length;
             const sortedDates = customerInvoices
@@ -4151,9 +4151,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         <div style="flex: 1;">
                             ${settings.companyLogo ? `<img src="${settings.companyLogo}" style="max-height: 70px; margin-bottom: 15px;">` : ''}
                             <div style="font-size: 11px; color: #666; line-height: 1.6;">
-                                <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #1a1a1a;">${escapeHtml(settings.companyName || 'Your Company')}</h3>
+                                <h3 style="margin: 0 0 8px 0; font-size: 20px; color: #1a1a1a;">${escapeHtml(settings.companyName || '<b>Your Company</b>')}</h3>
                                 ${normalizedCompanyAddress || '123 Business Street, City, Country'}
-                                ${settings.companyMobile ? `<br><i class="fas fa-phone"></i> ${escapeHtml(settings.companyMobile)}` : ''}
+                                ${settings.companyMobile ? `<i class="fas fa-phone"></i> ${escapeHtml(settings.companyMobile)}` : ''}
                                 ${settings.companyEmail ? `<br><i class="fas fa-envelope"></i> ${escapeHtml(settings.companyEmail)}` : ''}
                                 ${settings.companyWebsite ? `<br><i class="fas fa-globe"></i> ${escapeHtml(settings.companyWebsite)}` : ''}
                             </div>
@@ -4165,14 +4165,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                 <tr><td style="font-weight: bold; padding: 3px 0;">Date:</td><td style="padding: 3px 0;">${escapeHtml(data.date || '')}</td></tr>
                                 <tr><td style="font-weight: bold; padding: 3px 0;">Due Date:</td><td style="padding: 3px 0;">${escapeHtml(data.dueDate || '')}</td></tr>
                             </table>
-                            ${data.currency && data.currency !== 'SAR' ? `
-                            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #d1d5db;">
-                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Original Currency:</div>
-                                <div style="display: inline-block; padding: 6px 12px; border-radius: 16px; background: #ecfdf5; color: #166534; font-weight: 600; font-size: 13px;">
-                                    ${getCurrencyInfo(data.currency).symbol} ${data.currency}
-                                </div>
-                            </div>
-                            ` : ''}
                         </div>
                     </div>
                     
@@ -4241,20 +4233,6 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                         <td style="padding: 10px 15px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrency(convertCurrency(totalAmount))}</td>
                                     </tr>
                                 </table>
-                                ${data.currency && data.currency !== 'SAR' ? `
-                                <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #d1d5db;">
-                                    <table style="width: 100%; font-size: 11px;">
-                                        <tr style="background: #f9fafb;">
-                                            <td style="padding: 6px 15px; color: #666;">Original Amount (${data.currency}):</td>
-                                            <td style="padding: 6px 15px; text-align: right; font-weight: 600;">${getCurrencyInfo(data.currency).symbol} ${totalAmount.toFixed(2)}</td>
-                                        </tr>
-                                        <tr style="background: #f9fafb;">
-                                            <td style="padding: 6px 15px; color: #666;">Exchange Rate (${data.currency}/SAR):</td>
-                                            <td style="padding: 6px 15px; text-align: right; font-weight: 600;">1 = ${(1 / exchangeRates[data.currency]).toFixed(4)} SAR</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                                ` : ''}
                             </div>
                             
                             <!-- Amount in Words -->
@@ -4764,6 +4742,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             const _amtDue = Number(inv.amountDue != null ? inv.amountDue : (inv.total - _advP));
                             const _remaining = Math.max(0, _amtDue - Number(inv.paidAmount || 0));
                             const invCurrency = inv.currency || 'SAR';
+                            const convertedTotal = convertCurrency(Number(inv.total || 0), invCurrency);
+                            const convertedRemaining = convertCurrency(_remaining, invCurrency);
                             return `
                             <tr>
                                 <td>${inv.invoiceNo}</td>
@@ -4773,11 +4753,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                 <td>${inv.dueDate || '-'}</td>
                                 <td>
                                     <div style="display:flex;flex-direction:column;gap:4px;">
-                                        <span>${formatCurrencyWithSymbol(inv.total, invCurrency)}</span>
-                                        ${invCurrency !== 'SAR' ? `<span style="font-size:11px;color:var(--text-secondary);">= SR ${(inv.total / exchangeRates[invCurrency]).toFixed(2)}</span>` : ''}
+                                        <span>${formatCurrency(convertedTotal)}</span>
+                                        ${invCurrency !== currentCurrency ? `<span style="font-size:11px;color:var(--text-secondary);">${formatCurrencyWithSymbol(inv.total, invCurrency)}</span>` : ''}
                                     </div>
                                 </td>
-                                <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : `<div style="display:flex;flex-direction:column;gap:4px;"><span>${formatCurrencyWithSymbol(_remaining, invCurrency)}</span>${invCurrency !== 'SAR' ? `<span style="font-size:11px;color:var(--text-secondary);">= SR ${(_remaining / exchangeRates[invCurrency]).toFixed(2)}</span>` : ''}</div>`}</td>
+                                <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : `<div style="display:flex;flex-direction:column;gap:4px;"><span>${formatCurrency(convertedRemaining)}</span>${invCurrency !== currentCurrency ? `<span style="font-size:11px;color:var(--text-secondary);">${formatCurrencyWithSymbol(_remaining, invCurrency)}</span>` : ''}</div>`}</td>
                                 <td><span class="status ${inv.status}">${inv.status}</span></td>
                                 <td style="text-align:center;">
                                     <div class="action-dropdown">
@@ -4875,12 +4855,15 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         const _advP = Number(inv.advancePayment || 0);
                         const _amtDue = Number(inv.amountDue != null ? inv.amountDue : (inv.total - _advP));
                         const _rem = Math.max(0, _amtDue - Number(inv.paidAmount || 0));
+                        const invCurrency = inv.currency || 'SAR';
+                        const convertedTotal = convertCurrency(inv.total, invCurrency);
+                        const convertedRemaining = convertCurrency(_rem, invCurrency);
                         return `<tr>
                             <td>${inv.invoiceNo}</td>
                             <td>${inv.customerName}</td>
                             <td>${inv.date}</td>
-                            <td>${formatCurrency(convertCurrency(inv.total, inv.currency))}</td>
-                            <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : formatCurrency(convertCurrency(_rem, inv.currency))}</td>
+                            <td>${formatCurrency(convertedTotal)}${invCurrency !== currentCurrency ? `<div style="font-size:11px;color:var(--text-secondary);">${formatCurrencyWithSymbol(inv.total, invCurrency)}</div>` : ''}</td>
+                            <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : formatCurrency(convertedRemaining)}</td>
                             <td><span class="status ${inv.status}">${inv.status}</span></td>
                             <td style="text-align:center;"><div class="action-dropdown"><button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button><div class="action-dropdown-menu"><button onclick="editInvoice('${inv.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button><button onclick="printInvoiceById('${inv.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>${qrEnabled ? `<button onclick="openInvoiceQrForInvoice('${inv.id}')" class="action-dropdown-item item-info"><i class="fas fa-qrcode"></i> QR Code</button>` : ''}${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="openReceivePaymentModal('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-hand-holding-usd"></i> Receive Payment</button>`}<hr class="action-dropdown-divider"><button onclick="deleteInvoice('${inv.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button></div></div></td>
                         </tr>`;
@@ -7824,6 +7807,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return (num / exchangeRates[fromCurrency]) * toRate;
             }
             return num * toRate;
+        }
+
+        function convertAmountToSAR(amount, fromCurrency = 'SAR') {
+            const num = isFinite(Number(amount)) ? Number(amount) : 0;
+            if (!fromCurrency || fromCurrency === 'SAR') return num;
+            const rate = exchangeRates[fromCurrency] || 1;
+            return num / rate;
         }
 
         function formatCurrencyPlain(amount) {
