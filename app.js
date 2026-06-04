@@ -4004,10 +4004,19 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('productVatTotal').innerHTML = formatCurrency(convertCurrency(vatTotal));
             document.getElementById('productGrandTotal').innerHTML = formatCurrency(convertCurrency(totalWithShipping));
 
-            // Update unit-price column header to reflect active currency
-            const sym = { SAR: 'SR', BDT: '৳', USD: '$', EUR: '€' }[currentCurrency] || currentCurrency;
+            // Update unit-price column header to reflect active currency (use SVG for SAR)
+            const symMap = {
+                SAR: `<img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:6px;">`,
+                BDT: '৳',
+                USD: '$',
+                EUR: '€'
+            };
+            const sym = symMap[currentCurrency] || currentCurrency;
             const hdr = document.getElementById('invoiceUnitPriceHeader');
-            if (hdr) hdr.textContent = `Unit Price (${sym})`;
+            if (hdr) {
+                if (currentCurrency === 'SAR') hdr.innerHTML = `Unit Price (${sym})`;
+                else hdr.textContent = `Unit Price (${sym})`;
+            }
 
             window.currentSubtotal = subtotal;
             window.currentVatTotal = vatTotal;
@@ -4076,6 +4085,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const subtotal = itemTotals.reduce((sum, item) => sum + item.subtotal, 0);
             const discountTotal = itemTotals.reduce((sum, item) => sum + item.discountAmount, 0);
             const vatTotal = itemTotals.reduce((sum, item) => sum + item.vatAmount, 0);
+            const currency = data.currency || currentCurrency;
+            const fractionalLabel = currency === 'SAR' ? 'fils' : 'cents';
             const itemsTotal = itemTotals.reduce((sum, item) => sum + item.total, 0);
             const grossTotal = itemsTotal + (data.shipping || 0);
             const totalAmount = grossTotal - (data.advancePayment || 0);
@@ -4134,11 +4145,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             ${amounts.quantity}
                         </td>
                         <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; text-align: right;">
-                            ${formatCurrency(convertCurrency(amounts.price))}
+                            ${formatCurrencyWithSymbol(amounts.price, currency)}
                             ${item.vatIncluded ? `<div style="margin-top:3px;"><span style="display:inline-block;background:#ecfdf5;color:#166534;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;">VAT INCL.</span></div>` : ''}
                         </td>
                         <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; text-align: right;">
-                            ${formatCurrency(convertCurrency(amounts.total))}
+                            ${formatCurrencyWithSymbol(amounts.total, currency)}
                         </td>
                     </tr>
                 `;
@@ -4210,34 +4221,34 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                 <table style="width: 280px; font-size: 12px; border-collapse: collapse;">
                                     <tr>
                                         <td style="padding: 6px 15px; text-align: left;">Subtotal:</td>
-                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">${formatCurrency(convertCurrency(subtotal))}</td>
+                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">${formatCurrencyWithSymbol(subtotal, currency)}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 6px 15px; text-align: left;">Discount (${formatRate(invoiceDiscountRate)}%):</td>
-                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">-${formatCurrency(convertCurrency(discountTotal))}</td>
+                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">-${formatCurrencyWithSymbol(discountTotal, currency)}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 6px 15px; text-align: left;">VAT (${formatRate(invoiceVatRate)}%):</td>
-                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">${formatCurrency(convertCurrency(vatTotal))}</td>
+                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">${formatCurrencyWithSymbol(vatTotal, currency)}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 6px 15px; text-align: left;">Shipping:</td>
-                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 2px solid #333;">${formatCurrency(convertCurrency(data.shipping || 0))}</td>
+                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 2px solid #333;">${formatCurrencyWithSymbol(data.shipping || 0, currency)}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 6px 15px; text-align: left;">Advance Payment:</td>
-                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">-${formatCurrency(convertCurrency(data.advancePayment || 0))}</td>
+                                        <td style="padding: 6px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">-${formatCurrencyWithSymbol(data.advancePayment || 0, currency)}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 10px 15px; text-align: left; font-weight: bold; font-size: 13px;">Amount Due:</td>
-                                        <td style="padding: 10px 15px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrency(convertCurrency(totalAmount))}</td>
+                                        <td style="padding: 10px 15px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrencyWithSymbol(totalAmount, currency)}</td>
                                     </tr>
                                 </table>
                             </div>
                             
                             <!-- Amount in Words -->
                             <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 12px;">
-                                <strong>In Word:</strong> ${amountToWords(Math.floor(totalAmount))} ${Math.floor(totalAmount) === totalAmount ? '' : 'and ' + Math.round((totalAmount % 1) * 100) + ' fils'}
+                                <strong>In Word:</strong> ${amountToWords(Math.floor(totalAmount))} ${getCurrencyInfo(currency).name}${Math.floor(totalAmount) === totalAmount ? '' : ' and ' + Math.round((totalAmount % 1) * 100) + ' ' + fractionalLabel}
                             </div>
                         </div>
                     </div>
@@ -4417,11 +4428,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 customerAddress: selectedCustomer.address || '',
                 customerPhone: selectedCustomer.phone || '',
                 customerEmail: selectedCustomer.email || '',
+                currency: document.getElementById('quotationCurrencySelect')?.value || currentCurrency,
                 items: items,
                 subtotal: subtotal,
                 total: subtotal
             };
-            
             const previewHtml = generateQuotationHTML(quotationData);
             document.getElementById('quotationPreview').innerHTML = previewHtml;
         }
@@ -4431,6 +4442,47 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const normalizedCompanyAddress = (settings.companyAddress || '')
                 .replace(/(<br\s*\/?>\s*){2,}/gi, '<br>')
                 .replace(/^(<br\s*\/?>\s*)+|(<br\s*\/?>\s*)+$/gi, '');
+            const currency = data.currency || currentCurrency;
+            const fractionalLabel = currency === 'SAR' ? 'fils' : 'cents';
+            const subtotal = (data.items || []).reduce((sum, item) => sum + (item.quantity * item.price * (1 - item.discount / 100)), 0);
+            const totalAmount = data.total || subtotal;
+            function amountToWords(num) {
+                const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+                const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+                const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+                const scales = ['', 'thousand', 'million', 'billion'];
+
+                if (num === 0) return 'zero';
+                let words = '';
+                let scaleIndex = 0;
+
+                while (num > 0) {
+                    if (num % 1000 !== 0) {
+                        words = convertHundreds(num % 1000) + (scales[scaleIndex] ? ' ' + scales[scaleIndex] : '') + ' ' + words;
+                    }
+                    num = Math.floor(num / 1000);
+                    scaleIndex++;
+                }
+
+                function convertHundreds(num) {
+                    let result = '';
+                    if (Math.floor(num / 100) > 0) {
+                        result += ones[Math.floor(num / 100)] + ' hundred ';
+                    }
+                    num %= 100;
+                    if (num >= 20) {
+                        result += tens[Math.floor(num / 10)];
+                        if (num % 10 > 0) result += ' ' + ones[num % 10];
+                    } else if (num >= 10) {
+                        result += teens[num - 10];
+                    } else if (num > 0) {
+                        result += ones[num];
+                    }
+                    return result.trim();
+                }
+
+                return words.trim();
+            }
             const itemRows = (data.items || []).map(item => {
                 const amount = item.quantity * item.price * (1 - item.discount / 100);
                 return `
@@ -4442,19 +4494,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             ${item.quantity}
                         </td>
                         <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; text-align: right;">
-                            ${formatCurrency(convertCurrency(item.price))}
+                            ${formatCurrencyWithSymbol(item.price, currency)}
                         </td>
                         <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; text-align: center;">
                             ${item.discount}%
                         </td>
                         <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb; text-align: right;">
-                            ${formatCurrency(convertCurrency(amount))}
+                            ${formatCurrencyWithSymbol(amount, currency)}
                         </td>
                     </tr>
                 `;
             }).join('');
-            
-            const subtotal = (data.items || []).reduce((sum, item) => sum + (item.quantity * item.price * (1 - item.discount / 100)), 0);
             
             return `
                 <div style="background: white; padding: 40px; font-family: 'Segoe UI', Arial, sans-serif; max-width: 900px; margin: 0 auto; line-height: 1.4;">
@@ -4512,13 +4562,18 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         <table style="width: 280px; font-size: 12px; border-collapse: collapse;">
                             <tr>
                                 <td style="padding: 8px 15px; text-align: left;">Subtotal:</td>
-                                <td style="padding: 8px 15px; text-align: right; border-bottom: 2px solid #333; font-weight: bold;">${formatCurrency(convertCurrency(subtotal))}</td>
+                                <td style="padding: 8px 15px; text-align: right; border-bottom: 2px solid #333; font-weight: bold;">${formatCurrencyWithSymbol(subtotal, currency)}</td>
                             </tr>
                             <tr>
                                 <td style="padding: 12px 15px; text-align: left; font-weight: bold; font-size: 13px;">Total:</td>
-                                <td style="padding: 12px 15px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrency(convertCurrency(data.total || subtotal))}</td>
+                                <td style="padding: 12px 15px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrencyWithSymbol(totalAmount, currency)}</td>
                             </tr>
                         </table>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; margin-bottom: 30px;">
+                        <div style="width: 280px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 12px; text-align: right;">
+                            <strong>In Word:</strong> ${amountToWords(Math.floor(totalAmount))} ${getCurrencyInfo(currency).name}${Math.floor(totalAmount) === totalAmount ? '' : ' and ' + Math.round((totalAmount % 1) * 100) + ' ' + fractionalLabel}
+                        </div>
                     </div>
                     
                     <!-- Notes -->
@@ -4754,10 +4809,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                 <td>
                                     <div style="display:flex;flex-direction:column;gap:4px;">
                                         <span>${formatCurrency(convertedTotal)}</span>
-                                        ${invCurrency !== currentCurrency ? `<span style="font-size:11px;color:var(--text-secondary);">${formatCurrencyWithSymbol(inv.total, invCurrency)}</span>` : ''}
                                     </div>
                                 </td>
-                                <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : `<div style="display:flex;flex-direction:column;gap:4px;"><span>${formatCurrency(convertedRemaining)}</span>${invCurrency !== currentCurrency ? `<span style="font-size:11px;color:var(--text-secondary);">${formatCurrencyWithSymbol(_remaining, invCurrency)}</span>` : ''}</div>`}</td>
+                                <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : `<div style="display:flex;flex-direction:column;gap:4px;"><span>${formatCurrency(convertedRemaining)}</span></div>`}</td>
                                 <td><span class="status ${inv.status}">${inv.status}</span></td>
                                 <td style="text-align:center;">
                                     <div class="action-dropdown">
@@ -4862,7 +4916,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                             <td>${inv.invoiceNo}</td>
                             <td>${inv.customerName}</td>
                             <td>${inv.date}</td>
-                            <td>${formatCurrency(convertedTotal)}${invCurrency !== currentCurrency ? `<div style="font-size:11px;color:var(--text-secondary);">${formatCurrencyWithSymbol(inv.total, invCurrency)}</div>` : ''}</td>
+                            <td>${formatCurrency(convertedTotal)}</td>
                             <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : formatCurrency(convertedRemaining)}</td>
                             <td><span class="status ${inv.status}">${inv.status}</span></td>
                             <td style="text-align:center;"><div class="action-dropdown"><button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button><div class="action-dropdown-menu"><button onclick="editInvoice('${inv.id}')" class="action-dropdown-item item-edit"><i class="fas fa-edit"></i> Edit</button><button onclick="printInvoiceById('${inv.id}')" class="action-dropdown-item"><i class="fas fa-print"></i> Print</button>${qrEnabled ? `<button onclick="openInvoiceQrForInvoice('${inv.id}')" class="action-dropdown-item item-info"><i class="fas fa-qrcode"></i> QR Code</button>` : ''}${inv.status === 'Paid' ? `<span class="action-dropdown-item item-success" style="cursor:default;"><i class="fas fa-check-circle"></i> Paid</span>` : `<button onclick="openReceivePaymentModal('${inv.id}')" class="action-dropdown-item item-success"><i class="fas fa-hand-holding-usd"></i> Receive Payment</button>`}<hr class="action-dropdown-divider"><button onclick="deleteInvoice('${inv.id}')" class="action-dropdown-item item-danger"><i class="fas fa-trash"></i> Delete</button></div></div></td>
@@ -7818,6 +7872,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
         function formatCurrencyPlain(amount) {
             const num = isFinite(Number(amount)) ? Number(amount) : 0;
+            if (currentCurrency === 'SAR') {
+                return `<img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:6px;"> ${num.toFixed(2)}`;
+            }
             const sym = currencySymbols[currentCurrency] || currentCurrency;
             return `${sym} ${num.toFixed(2)}`;
         }
@@ -7846,6 +7903,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         function formatCurrencyWithSymbol(amount, currency) {
             const num = isFinite(Number(amount)) ? Number(amount) : 0;
             const info = getCurrencyInfo(currency);
+            if (currency === 'SAR') {
+                return `<img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:6px;"> ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
             return `${info.symbol} ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
@@ -7855,7 +7915,9 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const convertedInfo = getCurrencyInfo('SAR');
             const origNum = isFinite(Number(originalAmount)) ? Number(originalAmount) : 0;
             const convNum = isFinite(Number(convertedAmount)) ? Number(convertedAmount) : 0;
-            return `${origInfo.symbol} ${origNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = ${convertedInfo.symbol} ${convNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const origSymbol = originalCurrency === 'SAR' ? `<img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:6px;">` : origInfo.symbol;
+            const convSymbol = `<img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:6px;">`;
+            return `${origSymbol} ${origNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = ${convSymbol} ${convNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
         // Get HTML currency badge: colored label with symbol
