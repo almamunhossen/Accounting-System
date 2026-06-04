@@ -4,3 +4,4 @@
 *.txt
 *.gitignore
 **/data/
+*.test.py

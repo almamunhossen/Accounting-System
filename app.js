@@ -68,6 +68,20 @@
             };
         }
 
+        /**
+         * toast(message, type) — non-blocking replacement for toast().
+         * type: 'error' | 'success' | 'info' | 'warning'
+         * Falls back to console.warn if the API client is not yet loaded.
+         */
+        function toast(message, type = 'error') {
+            if (window.APIClient?.showToast) {
+                window.APIClient.showToast(String(message), type);
+            } else {
+                // APIClient not ready yet — queue for after load or warn
+                console.warn(`[${type.toUpperCase()}]`, message);
+            }
+        }
+
         // ===== ACTION DROPDOWN UTILITY =====
         function toggleActionDropdown(btn, event) {
             if (event) event.stopPropagation();
@@ -361,7 +375,7 @@
                         authenticatedName = authRecord.name || username || 'Admin';
                     }
                 } catch (error) {
-                    console.error('Admin verification via API failed, using local fallback.', error);
+                    console.warn('Admin verification via API failed, using local fallback.', error);
                 }
             }
 
@@ -434,7 +448,7 @@
             try {
                 await initializeAppAfterLogin();
             } catch (error) {
-                console.error('Initialization failed after login; continuing with cached data.', error);
+                console.warn('Initialization failed after login; continuing with cached data.', error);
                 if (window.APIClient?.showToast) {
                     window.APIClient.showToast('API sync failed. Continuing with cached data.', 'error');
                 }
@@ -1034,10 +1048,19 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         async function syncCustomersFromApi() {
-            const rows = await window.APIClient.getData('getCustomers');
-            // Filter out corrupted rows (missing name) that were created by old backend versions
-            customers = rows.filter(r => String(r.name || '').trim()).map(normalizeCustomerFromApi);
-            renderCustomers();
+            try {
+                const rows = await window.APIClient.getData('getCustomers');
+                // Filter out corrupted rows (missing name) that were created by old backend versions
+                customers = rows.filter(r => String(r.name || '').trim()).map(normalizeCustomerFromApi);
+                renderCustomers();
+            } catch (error) {
+                const msg = String(error?.message || error || '');
+                if (/Unknown action:\s*getCustomers/i.test(msg)) {
+                    toast('Customers API not deployed yet. Using cached data.', 'error');
+                } else {
+                    console.warn('syncCustomersFromApi failed (using cached data):', msg);
+                }
+            }
         }
 
         async function syncProductsFromApi() {
@@ -1125,25 +1148,29 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         async function syncSettingsFromApi() {
-            const rows = await window.APIClient.getData('getSettings');
-            if (!Array.isArray(rows) || rows.length === 0) return;
+            try {
+                const rows = await window.APIClient.getData('getSettings');
+                if (!Array.isArray(rows) || rows.length === 0) return;
 
-            const settings = readStoredJson('pro_invoice_settings', {});
-            rows.forEach(row => {
-                const key = String(row.key || '').trim();
-                if (!key) return;
-                const rawValue = row.value;
-                if (typeof rawValue === 'string') {
-                    try {
-                        settings[key] = JSON.parse(rawValue);
-                    } catch (error) {
+                const settings = readStoredJson('pro_invoice_settings', {});
+                rows.forEach(row => {
+                    const key = String(row.key || '').trim();
+                    if (!key) return;
+                    const rawValue = row.value;
+                    if (typeof rawValue === 'string') {
+                        try {
+                            settings[key] = JSON.parse(rawValue);
+                        } catch (error) {
+                            settings[key] = rawValue;
+                        }
+                    } else {
                         settings[key] = rawValue;
                     }
-                } else {
-                    settings[key] = rawValue;
-                }
-            });
-            writeStoredJson('pro_invoice_settings', settings);
+                });
+                writeStoredJson('pro_invoice_settings', settings);
+            } catch (error) {
+                console.warn('syncSettingsFromApi failed (using cached settings):', String(error?.message || error || ''));
+            }
         }
 
         async function saveSettingsToApi(settings) {
@@ -1194,47 +1221,56 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         async function syncInvoicesFromApi() {
-            const rows = await window.APIClient.getData('getInvoices');
-            invoices = rows.map(row => ({
-                id: String(row.id || Date.now().toString()),
-                invoiceNo: row.invoice_no || row.invoiceNo || '',
-                customerId: row.customer_id || row.customerId || '',
-                customerName: row.customer_name || row.customerName || (customers.find(c => String(c.id) === String(row.customer_id || row.customerId || ''))?.name || ''),
-                customerPhone: row.customer_phone || row.customerPhone || '',
-                customerEmail: row.customer_email || row.customerEmail || '',
-                customerCompany: row.customer_company || row.customerCompany || '',
-                customerVatNumber: row.customer_vat || row.customerVatNumber || '',
-                customerAddress: row.customer_address || row.customerAddress || '',
-                date: row.date || '',
-                dueDate: row.due_date || row.dueDate || '',
-                items: (function parseItems(raw) {
-                    if (typeof raw !== 'string') return raw || [];
-                    if (!raw) return [];
-                    try { return JSON.parse(raw); } catch (error) { return []; }
-                })(row.items),
-                subtotal: Number(row.subtotal || 0),
-                discount: Number(row.discount || 0),
-                vatRate: Number(row.vat || row.vatRate || 0),
-                shipping: Number(row.shipping || 0),
-                advancePayment: Number(row.advance_payment || row.advancePayment || 0),
-                paymentMethod: row.payment_method || row.paymentMethod || 'Cash',
-                total: Number(row.total || 0),
-                amountDue: Number(row.amount_due || row.amountDue || row.total || 0),
-                paidAmount: Number(row.paid_amount || row.paidAmount || 0),
-                status: row.status || 'Unpaid',
-                currency: row.currency || 'SAR'
-            }));
+            try {
+                const rows = await window.APIClient.getData('getInvoices');
+                invoices = rows.map(row => ({
+                    id: String(row.id || Date.now().toString()),
+                    invoiceNo: row.invoice_no || row.invoiceNo || '',
+                    customerId: row.customer_id || row.customerId || '',
+                    customerName: row.customer_name || row.customerName || (customers.find(c => String(c.id) === String(row.customer_id || row.customerId || ''))?.name || ''),
+                    customerPhone: row.customer_phone || row.customerPhone || '',
+                    customerEmail: row.customer_email || row.customerEmail || '',
+                    customerCompany: row.customer_company || row.customerCompany || '',
+                    customerVatNumber: row.customer_vat || row.customerVatNumber || '',
+                    customerAddress: row.customer_address || row.customerAddress || '',
+                    date: row.date || '',
+                    dueDate: row.due_date || row.dueDate || '',
+                    items: (function parseItems(raw) {
+                        if (typeof raw !== 'string') return raw || [];
+                        if (!raw) return [];
+                        try { return JSON.parse(raw); } catch (error) { return []; }
+                    })(row.items),
+                    subtotal: Number(row.subtotal || 0),
+                    discount: Number(row.discount || 0),
+                    vatRate: Number(row.vat || row.vatRate || 0),
+                    shipping: Number(row.shipping || 0),
+                    advancePayment: Number(row.advance_payment || row.advancePayment || 0),
+                    paymentMethod: row.payment_method || row.paymentMethod || 'Cash',
+                    total: Number(row.total || 0),
+                    amountDue: Number(row.amount_due || row.amountDue || row.total || 0),
+                    paidAmount: Number(row.paid_amount || row.paidAmount || 0),
+                    status: row.status || 'Unpaid',
+                    currency: row.currency || 'SAR'
+                }));
 
-            // Auto-increment: derive nextInvoiceNumber from the highest INV-XXXX stored in Google Sheets
-            const maxInvUsed = invoices.reduce((max, inv) => {
-                const match = String(inv.invoiceNo || '').match(/^INV-(\d+)$/i);
-                if (!match) return max;
-                const parsed = parseInt(match[1], 10);
-                return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
-            }, 2000);
-            if (maxInvUsed + 1 > nextInvoiceNumber) {
-                nextInvoiceNumber = maxInvUsed + 1;
-                generateInvoiceNumber();
+                // Auto-increment: derive nextInvoiceNumber from the highest INV-XXXX stored in Google Sheets
+                const maxInvUsed = invoices.reduce((max, inv) => {
+                    const match = String(inv.invoiceNo || '').match(/^INV-(\d+)$/i);
+                    if (!match) return max;
+                    const parsed = parseInt(match[1], 10);
+                    return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+                }, 2000);
+                if (maxInvUsed + 1 > nextInvoiceNumber) {
+                    nextInvoiceNumber = maxInvUsed + 1;
+                    generateInvoiceNumber();
+                }
+            } catch (error) {
+                const msg = String(error?.message || error || '');
+                if (/Unknown action:\s*getInvoices/i.test(msg)) {
+                    toast('Invoices API not deployed yet. Using cached data. Redeploy the Apps Script to enable sync.', 'error');
+                } else {
+                    console.warn('syncInvoicesFromApi failed (using cached data):', msg);
+                }
             }
         }
 
@@ -1383,6 +1419,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     document.querySelectorAll('.currency-btn').forEach(btn => {
                         btn.classList.toggle('active', btn.dataset.currency === savedCurrency);
                     });
+                    // Sync all currency dropdowns so they match the saved value
+                    const _rSel = document.getElementById('reportCurrencySelect');
+                    if (_rSel) _rSel.value = savedCurrency;
+                    const _iSel = document.getElementById('invoiceCurrencySelect');
+                    if (_iSel) _iSel.value = savedCurrency;
+                    const _qSel = document.getElementById('quotationCurrencySelect');
+                    if (_qSel) _qSel.value = savedCurrency;
                 }
             } catch(e) {}
             applySidebarBranding();
@@ -1401,7 +1444,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 try {
                     await initializeAppAfterLogin();
                 } catch (error) {
-                    console.error('Initialization failed on refresh; keeping authenticated session.', error);
+                    console.warn('Initialization failed on refresh; keeping authenticated session.', error);
                     if (window.APIClient?.showToast) {
                         window.APIClient.showToast('API sync failed on refresh. Signed in with cached data.', 'error');
                     }
@@ -1667,9 +1710,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const totalExpense = accountingEntries.reduce((s, e) => s + (parseFloat(e.expense) || 0), 0);
             const netBalance   = totalIncome - totalExpense;
             const setKpi = (id, val, isHtml) => { const el = document.getElementById(id); if (el) { if (isHtml) el.innerHTML = val; else el.textContent = val; } };
-            setKpi('accKpiIncome',  formatCurrency(totalIncome),  true);
-            setKpi('accKpiExpense', formatCurrency(totalExpense), true);
-            setKpi('accKpiBalance', formatCurrency(netBalance),   true);
+            setKpi('accKpiIncome',  formatCurrency(convertCurrency(totalIncome)),  true);
+            setKpi('accKpiExpense', formatCurrency(convertCurrency(totalExpense)), true);
+            setKpi('accKpiBalance', formatCurrency(convertCurrency(netBalance)),   true);
             setKpi('accKpiEntries', accountingEntries.length,     false);
             const balEl = document.getElementById('accKpiBalance');
             if (balEl) {
@@ -1697,9 +1740,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     <td class="acc-row-num">${i + 1}</td>
                     <td class="acc-date-cell"><i class="fas fa-calendar-days acc-date-icon"></i>${e.date || '—'}</td>
                     <td class="acc-desc-cell">${e.description || '—'}</td>
-                    <td class="text-right acc-income-cell">${inc > 0 ? `<span class="acc-chip acc-chip-income">${formatCurrency(inc)}</span>` : '<span class="acc-chip-nil">—</span>'}</td>
-                    <td class="text-right acc-expense-cell">${exp > 0 ? `<span class="acc-chip acc-chip-expense">${formatCurrency(exp)}</span>` : '<span class="acc-chip-nil">—</span>'}</td>
-                    <td class="text-right"><span class="acc-balance-badge ${balClass}">${formatCurrency(bal)}</span></td>
+                    <td class="text-right acc-income-cell">${inc > 0 ? `<span class="acc-chip acc-chip-income">${formatCurrency(convertCurrency(inc))}</span>` : '<span class="acc-chip-nil">—</span>'}</td>
+                    <td class="text-right acc-expense-cell">${exp > 0 ? `<span class="acc-chip acc-chip-expense">${formatCurrency(convertCurrency(exp))}</span>` : '<span class="acc-chip-nil">—</span>'}</td>
+                    <td class="text-right"><span class="acc-balance-badge ${balClass}">${formatCurrency(convertCurrency(bal))}</span></td>
                     <td class="text-center">
                         <div class="action-dropdown">
                             <button onclick="toggleActionDropdown(this,event)" class="action-dropdown-btn" title="Actions"><i class="fas fa-ellipsis-v"></i></button>
@@ -1715,7 +1758,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function exportAccountingCSV() {
-            if (!accountingEntries.length) { alert('No accounting entries to export.'); return; }
+            if (!accountingEntries.length) { toast('No accounting entries to export.'); return; }
             const headers = ['#','Date','Description','Income','Expense','Balance'];
             const rows = accountingEntries.map((e, i) => [
                 i + 1,
@@ -1743,6 +1786,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('accountingExpense').value = '0';
             document.getElementById('accountingBalance').value = '0';
             document.getElementById('accountingModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('accountingDescription')?.focus(), 50);
         }
 
         function closeAccountingModal() {
@@ -1819,7 +1863,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (isApiEnabled()) {
                 syncExpensesFromApi()
                     .then(() => renderExpenses())
-                    .catch(err => console.error(err));
+                    .catch(err => console.warn(err));
             }
         }
 
@@ -1839,14 +1883,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 return;
             }
 
-            const totalAmount = filtered.reduce((sum, e) => sum + convertCurrency(Number(e.amount || 0)), 0);
+            const totalAmount = filtered.reduce((sum, e) => sum + convertCurrency(Number(e.amount || 0), e.currency || 'SAR'), 0);
 
             container.innerHTML = `
                 <div class="supplier-list-shell">
                     <div class="supplier-list-title" style="display:flex;justify-content:space-between;align-items:center;">
                         <span><i class="fas fa-receipt" style="margin-right:8px;color:var(--accent);"></i>Expense Records</span>
                         <span style="font-size:13px;font-weight:600;color:#dc3545;">
-                            Total: ${formatCurrency(totalAmount)}
+                            Total (SAR): ${formatCurrency(convertCurrency(totalAmount))}
                         </span>
                     </div>
                     <div class="supplier-table-wrap">
@@ -1856,13 +1900,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                     <th>Expense ID</th>
                                     <th>Description</th>
                                     <th>Category</th>
+                                    <th>Currency</th>
                                     <th>Date</th>
                                     <th style="text-align:right;">Amount</th>
                                     <th style="text-align:center;">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${filtered.map(e => `
+                                ${filtered.map(e => {
+                                    const expCurrency = e.currency || 'SAR';
+                                    const sarAmount = convertCurrency(Number(e.amount || 0), expCurrency);
+                                    return `
                                     <tr>
                                         <td class="supplier-id-cell">${escapeHtml(e.id || '-')}</td>
                                         <td>
@@ -1871,9 +1919,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                         <td>
                                             <span class="supplier-status-badge" style="background:rgba(74,144,226,0.12);color:var(--accent);border:1px solid rgba(74,144,226,0.25);">${escapeHtml(e.category || 'General')}</span>
                                         </td>
+                                        <td>${getCurrencyBadge(expCurrency)}</td>
                                         <td>${escapeHtml(e.date || '-')}</td>
                                         <td style="text-align:right;">
-                                            <span style="font-weight:700;color:#dc3545;">${formatCurrency(convertCurrency(e.amount))}</span>
+                                            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                                                <span style="font-weight:700;color:#dc3545;">${formatCurrencyWithSymbol(e.amount, expCurrency)}</span>
+                                                ${expCurrency !== 'SAR' ? `<span style="font-size:11px;color:var(--text-secondary);">= SR ${sarAmount.toFixed(2)}</span>` : ''}
+                                            </div>
                                         </td>
                                         <td style="text-align:center;">
                                             <div class="action-dropdown">
@@ -1887,7 +1939,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                             </div>
                                         </td>
                                     </tr>
-                                `).join('')}
+                                    `;
+                                }).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -2042,8 +2095,32 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('expenseCategory').value = 'General';
             document.getElementById('expenseDescription').value = '';
             document.getElementById('expenseAmount').value = '0';
+            document.getElementById('expenseCurrency').value = currentCurrency;
             populateExpensePayToDropdowns();
             document.getElementById('expenseModal').style.display = 'flex';
+            updateExpensePreview();
+            setTimeout(() => document.getElementById('expenseDescription')?.focus(), 50);
+        }
+
+        function updateExpensePreview() {
+            const amount = parseFloat(document.getElementById('expenseAmount')?.value) || 0;
+            const currency = document.getElementById('expenseCurrency')?.value || 'SAR';
+            const preview = document.getElementById('expenseConversionPreview');
+            
+            if (!amount || currency === 'SAR') {
+                if (preview) preview.style.display = 'none';
+                return;
+            }
+            
+            const rate = exchangeRates[currency] || 1;
+            const converted = amount / rate;
+            const info = getCurrencyInfo(currency);
+            
+            if (document.getElementById('expenseOriginalAmount')) {
+                document.getElementById('expenseOriginalAmount').textContent = `${info.symbol} ${amount.toFixed(2)} ${currency}`;
+                document.getElementById('expenseConvertedAmount').textContent = `= SR ${converted.toFixed(2)}`;
+                if (preview) preview.style.display = 'block';
+            }
         }
 
         function closeExpenseModal() {
@@ -2060,8 +2137,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('expenseCategory').value = entry.category || 'General';
             document.getElementById('expenseDescription').value = entry.description || '';
             document.getElementById('expenseAmount').value = entry.amount || 0;
+            document.getElementById('expenseCurrency').value = entry.currency || 'SAR';
             populateExpensePayToDropdowns(entry.payToSupplier || '', entry.payToEmployee || '');
             document.getElementById('expenseModal').style.display = 'flex';
+            updateExpensePreview();
         }
 
         async function saveExpenseEntry() {
@@ -2073,7 +2152,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 amount: Number(document.getElementById('expenseAmount').value) || 0,
                 payToSupplier: document.getElementById('expensePayToSupplier')?.value || '',
                 payToEmployee: document.getElementById('expensePayToEmployee')?.value || '',
-                currency: currentCurrency || 'SAR'
+                currency: document.getElementById('expenseCurrency')?.value || 'SAR'
             };
             if (!entry.date) { window.APIClient?.showToast?.('Please enter a date.', 'error'); return; }
             if (entry.amount <= 0) { window.APIClient?.showToast?.('Please enter a valid amount.', 'error'); return; }
@@ -2112,12 +2191,12 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function updateDashboard() {            document.getElementById('totalCustomers').innerText = customers.length;
             document.getElementById('totalInvoices').innerText = invoices.length;
             const totalRevenue = invoices.reduce((sum, inv) => sum + convertCurrency(inv.total), 0);
-            document.getElementById('totalRevenue').innerHTML = formatCurrency(totalRevenue);
+            document.getElementById('totalRevenue').innerHTML = formatCurrency(convertCurrency(totalRevenue));
             
             const currentMonth = new Date().getMonth();
             const monthRevenue = invoices.filter(inv => new Date(inv.date).getMonth() === currentMonth)
                 .reduce((sum, inv) => sum + convertCurrency(inv.total), 0);
-            document.getElementById('monthRevenue').innerHTML = formatCurrency(monthRevenue);
+            document.getElementById('monthRevenue').innerHTML = formatCurrency(convertCurrency(monthRevenue));
             
             updateTopCustomers();
         }
@@ -2132,7 +2211,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 .slice(0,5)
                 .map(([id, total]) => {
                     const customer = customers.find(c => c.id === id);
-                    return `<div class="order-item"><span>${customer?.name || 'Unknown'}</span><span>${formatCurrency(total)}</span></div>`;
+                    return `<div class="order-item"><span>${customer?.name || 'Unknown'}</span><span>${formatCurrency(convertCurrency(total))}</span></div>`;
                 }).join('');
             document.getElementById('topCustomersList').innerHTML = topCustomers || '<p>No data</p>';
         }
@@ -2267,7 +2346,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 </div>
             `;
             } catch (err) {
-                console.error('[renderCustomers error]', err);
+                console.warn('[renderCustomers error]', err);
             }
         }
 
@@ -2278,6 +2357,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const nextId = generateCustomerCode();
             document.getElementById('customerIdDisplay').value = nextId;
             document.getElementById('customerModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('customerName')?.focus(), 50);
         }
 
         function editCustomer(id) {
@@ -2303,6 +2383,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 document.getElementById('customerClosingBalance').value = Number(customer.closingBalance || 0);
                 document.getElementById('customerClosingBalanceType').value = customer.closingBalanceType || 'Dr';
                 document.getElementById('customerModal').style.display = 'flex';
+                setTimeout(() => document.getElementById('customerName')?.focus(), 50);
             }
         }
 
@@ -2315,7 +2396,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     customers = customers.filter(c => c.id !== id);
                     window.APIClient.showToast('Customer deleted successfully', 'success');
                 } catch (error) {
-                    console.error('Customer API delete failed:', error);
+                    console.warn('Customer API delete failed:', error);
                     window.APIClient.showToast('Failed to delete customer', 'error');
                     return;
                 }
@@ -2375,7 +2456,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     }
                     saveApiCache();
                 } catch (error) {
-                    console.error('Customer API save failed:', error);
+                    console.warn('Customer API save failed:', error);
                     return;
                 }
             } else {
@@ -2440,7 +2521,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         function generateCustomerQR(customerId) {
             if (!isVatTaxEnabled()) {
-                alert('VAT/Tax is disabled in Settings. QR code is hidden for invoice.');
+                toast('VAT/Tax is disabled in Settings. QR code is hidden for invoice.');
                 return;
             }
             const customer = customers.find(c => c.id === customerId);
@@ -2470,7 +2551,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     addContactNoteToCustomer(customerId, `WhatsApp: ${message.substring(0, 50)}...`);
                 }
             } else {
-                alert('Customer phone number not available');
+                toast('Customer phone number not available');
             }
         }
 
@@ -2592,7 +2673,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         customer: normalizeCustomerToApi(customer)
                     });
                 } catch (error) {
-                    console.error('Failed to refresh customer financials via API:', error);
+                    console.warn('Failed to refresh customer financials via API:', error);
                 }
             } else {
                 saveData();
@@ -2705,7 +2786,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 </div>
             `;
             } catch (err) {
-                console.error('[renderSuppliers error]', err);
+                console.warn('[renderSuppliers error]', err);
             }
         }
 
@@ -2721,6 +2802,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('supplierTotalPaid').value = 0;
             document.getElementById('supplierDueAmount').value = 0;
             document.getElementById('supplierModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('supplierName')?.focus(), 50);
         }
 
         function recalcSupplierDue() {
@@ -2755,6 +2837,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('supplierTotalPaid').value = Number(supplier.totalPaid || 0).toFixed(2);
             document.getElementById('supplierDueAmount').value = financials.dueAmount.toFixed(2);
             document.getElementById('supplierModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('supplierName')?.focus(), 50);
         }
 
         function printSupplierDetails(supplierId) {
@@ -2826,7 +2909,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     // Optimistic update: remove locally instead of re-fetching all
                     suppliers = suppliers.filter(s => s.id !== id);
                 } catch (error) {
-                    console.error('Supplier API delete failed:', error);
+                    console.warn('Supplier API delete failed:', error);
                     return;
                 }
             } else {
@@ -2941,7 +3024,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (window.APIClient && window.APIClient.showToast) {
                     window.APIClient.showToast('Please enter an invoice number.', 'error');
                 } else {
-                    alert('Please enter an invoice number.');
+                    toast('Please enter an invoice number.');
                 }
                 return;
             }
@@ -2950,7 +3033,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (window.APIClient && window.APIClient.showToast) {
                     window.APIClient.showToast('Please enter a product name.', 'error');
                 } else {
-                    alert('Please enter a product name.');
+                    toast('Please enter a product name.');
                 }
                 return;
             }
@@ -2959,7 +3042,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (window.APIClient && window.APIClient.showToast) {
                     window.APIClient.showToast('Please enter valid quantity and unit cost.', 'error');
                 } else {
-                    alert('Please enter valid quantity and unit cost.');
+                    toast('Please enter valid quantity and unit cost.');
                 }
                 return;
             }
@@ -3091,7 +3174,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (window.APIClient && window.APIClient.showToast) {
                     window.APIClient.showToast('Select an invoice to pay.', 'error');
                 } else {
-                    alert('Select an invoice to pay.');
+                    toast('Select an invoice to pay.');
                 }
                 return;
             }
@@ -3102,7 +3185,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 if (window.APIClient && window.APIClient.showToast) {
                     window.APIClient.showToast('Please enter a valid payment amount.', 'error');
                 } else {
-                    alert('Please enter a valid payment amount.');
+                    toast('Please enter a valid payment amount.');
                 }
                 return;
             }
@@ -3112,11 +3195,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             const purchaseEntry = getSupplierPurchaseHistory(currentSupplierId).find(entry => String(entry.id) === String(currentSupplierPaymentEntryId));
             if (!purchaseEntry) {
-                alert('Selected invoice was not found.');
+                toast('Selected invoice was not found.');
                 return;
             }
             if (amount > Number(purchaseEntry.dueAmount || 0)) {
-                alert(`Payment amount cannot exceed invoice due ${formatCurrencyPlain(convertCurrency(Number(purchaseEntry.dueAmount || 0)))}`);
+                toast(`Payment amount cannot exceed invoice due ${formatCurrencyPlain(convertCurrency(Number(purchaseEntry.dueAmount || 0)))}`);
                 return;
             }
 
@@ -3282,7 +3365,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     }
                     saveApiCache();
                 } catch (error) {
-                    console.error('Supplier API save failed:', error);
+                    console.warn('Supplier API save failed:', error);
                     return;
                 }
             } else {
@@ -3443,12 +3526,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const saveButton = document.getElementById('productModalSubmitBtn');
             if (saveButton) saveButton.textContent = 'Save Product';
             document.getElementById('productModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('productModalName')?.focus(), 50);
         }
 
         function editProduct(id) {
             const product = savedProducts.find(p => String(p.id) === String(id));
             if (!product) {
-                alert('Product not found.');
+                toast('Product not found.');
                 return;
             }
 
@@ -3469,6 +3553,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (saveButton) saveButton.textContent = 'Update Product';
 
             document.getElementById('productModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('productModalName')?.focus(), 50);
         }
 
         function closeProductModal() {
@@ -3494,7 +3579,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             };
 
             if (!productData.name) {
-                alert('Product name is required.');
+                toast('Product name is required.');
                 return;
             }
 
@@ -3525,11 +3610,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     window.APIClient?.showToast?.(currentProductId ? 'Product updated successfully' : 'Product added successfully', 'success');
                 } catch (error) {
                     // api.js already shows the specific error toast — just log and abort.
-                    console.error('Product API save failed:', error?.message || error);
+                    console.warn('Product API save failed:', error?.message || error);
                     return;
                 }
             } else {
-                alert('API is offline. Product changes are not stored locally; reconnect to save in Google Sheets.');
+                toast('API is offline. Product changes are not stored locally; reconnect to save in Google Sheets.');
                 return;
             }
 
@@ -3562,7 +3647,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             try {
                 const container = document.getElementById('invoiceItemsTableBody');
                 if (!container) {
-                    console.error('addItemInput: invoiceItemsTableBody element not found');
+                    console.warn('addItemInput: invoiceItemsTableBody element not found');
                     return;
                 }
                 
@@ -3623,8 +3708,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 updateProductRow(row);
                 console.log(`Item row ${rowId} created successfully`);
             } catch (error) {
-                console.error('Error in addItemInput:', error);
-                alert('Error: Could not add item to invoice. Please try again.');
+                console.warn('Error in addItemInput:', error);
+                toast('Error: Could not add item to invoice. Please try again.');
             }
         }
 
@@ -3848,12 +3933,38 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         function updateInvoiceCurrency() {
             const sel = document.getElementById('invoiceCurrencySelect');
-            if (sel && sel.value) currentCurrency = sel.value;
-            // Keep the floating panel in sync
+            if (sel && sel.value) {
+                currentCurrency = sel.value;
+                // Persist so it survives page refresh
+                try { localStorage.setItem('pro_invoice_currency', sel.value); } catch(e) {}
+            }
+            // Keep the floating panel buttons in sync
             document.querySelectorAll('.currency-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.currency === currentCurrency);
             });
+            // Keep the reports and quotation selectors in sync
+            const repSel = document.getElementById('reportCurrencySelect');
+            if (repSel) repSel.value = currentCurrency;
+            const qSel = document.getElementById('quotationCurrencySelect');
+            if (qSel) qSel.value = currentCurrency;
             updateTotals();
+        }
+
+        function updateQuotationCurrency() {
+            const sel = document.getElementById('quotationCurrencySelect');
+            if (sel && sel.value) {
+                currentCurrency = sel.value;
+                try { localStorage.setItem('pro_invoice_currency', sel.value); } catch(e) {}
+            }
+            // Sync all currency controls
+            document.querySelectorAll('.currency-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.currency === currentCurrency);
+            });
+            const repSel = document.getElementById('reportCurrencySelect');
+            if (repSel) repSel.value = currentCurrency;
+            const invSel = document.getElementById('invoiceCurrencySelect');
+            if (invSel) invSel.value = currentCurrency;
+            updateQuotationPreview();
         }
 
         function updateTotals() {
@@ -3920,6 +4031,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 sellerName: settings.companyName || '',
                 vatNumber: settings.companyVatNumber || '',
                 timestamp: timestamp,
+                currency: document.getElementById('invoiceCurrencySelect')?.value || 'SAR',
                 items: items,
                 subtotal: window.currentSubtotal || 0,
                 discount: validateNumber(document.getElementById('discountInput')?.value),
@@ -4047,6 +4159,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                 <tr><td style="font-weight: bold; padding: 3px 0;">Date:</td><td style="padding: 3px 0;">${escapeHtml(data.date || '')}</td></tr>
                                 <tr><td style="font-weight: bold; padding: 3px 0;">Due Date:</td><td style="padding: 3px 0;">${escapeHtml(data.dueDate || '')}</td></tr>
                             </table>
+                            ${data.currency && data.currency !== 'SAR' ? `
+                            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #d1d5db;">
+                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Original Currency:</div>
+                                <div style="display: inline-block; padding: 6px 12px; border-radius: 16px; background: #ecfdf5; color: #166534; font-weight: 600; font-size: 13px;">
+                                    ${getCurrencyInfo(data.currency).symbol} ${data.currency}
+                                </div>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                     
@@ -4115,6 +4235,20 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                                         <td style="padding: 10px 15px; text-align: right; font-weight: bold; font-size: 13px;">${formatCurrency(convertCurrency(totalAmount))}</td>
                                     </tr>
                                 </table>
+                                ${data.currency && data.currency !== 'SAR' ? `
+                                <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #d1d5db;">
+                                    <table style="width: 100%; font-size: 11px;">
+                                        <tr style="background: #f9fafb;">
+                                            <td style="padding: 6px 15px; color: #666;">Original Amount (${data.currency}):</td>
+                                            <td style="padding: 6px 15px; text-align: right; font-weight: 600;">${getCurrencyInfo(data.currency).symbol} ${totalAmount.toFixed(2)}</td>
+                                        </tr>
+                                        <tr style="background: #f9fafb;">
+                                            <td style="padding: 6px 15px; color: #666;">Exchange Rate (${data.currency}/SAR):</td>
+                                            <td style="padding: 6px 15px; text-align: right; font-weight: 600;">1 = ${(1 / exchangeRates[data.currency]).toFixed(4)} SAR</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                                ` : ''}
                             </div>
                             
                             <!-- Amount in Words -->
@@ -4167,7 +4301,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function toggleVatTaxQrSetting() {
             const nextState = !isVatTaxEnabled();
             setVatTaxEnabled(nextState);
-            alert(nextState ? 'VAT/Tax QR enabled for invoices.' : 'VAT/Tax QR disabled for invoices.');
+            toast(nextState ? 'VAT/Tax QR enabled for invoices.' : 'VAT/Tax QR disabled for invoices.');
         }
 
         function normalizeVatNumber(value) {
@@ -4421,13 +4555,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const customerSnapshot = getInvoiceCustomerSnapshot();
             const customerName = customerSnapshot.customerName;
             if (!customerName) {
-                alert('Please enter customer name');
+                toast('Please enter customer name');
                 return;
             }
             
             const items = getItemsFromInputs();
             if (items.length === 0) {
-                alert('Please add at least one item');
+                toast('Please add at least one item');
                 return;
             }
             
@@ -4550,7 +4684,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     }
                     await refreshCustomerFinancials(customerId);
                 } catch (error) {
-                    console.error('Invoice API save failed:', error);
+                    console.warn('Invoice API save failed:', error);
                     return;
                 }
             } else {
@@ -4576,9 +4710,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function sendInvoiceEmail() {
             const email = document.getElementById('customerEmailInput')?.value;
             if (email) {
-                alert(`Invoice details can be sent to ${email}`);
+                toast(`Invoice details can be sent to ${email}`);
             } else {
-                alert('Please add customer email address');
+                toast('Please add customer email address');
             }
         }
 
@@ -4590,7 +4724,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 const message = `Dear customer,\n\nYour invoice ${invoiceNo} for ${total} is ready.\nThank you for your business!`;
                 window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
             } else {
-                alert('Please add customer phone number');
+                toast('Please add customer phone number');
             }
         }
 
@@ -4604,7 +4738,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 // Sync in background without blocking UI
                 syncInvoicesFromApi()
                     .then(() => renderInvoiceTable())
-                    .catch(error => console.error(error));
+                    .catch(error => console.warn(error));
             }
         }
 
@@ -4616,21 +4750,28 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             container.innerHTML = `
                 <table class="data-table">
                     <thead>
-                        <tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Due Date</th><th>Total</th><th>Remaining Due</th><th>Status</th><th>Actions</th></tr>
+                        <tr><th>Invoice #</th><th>Customer</th><th>Currency</th><th>Date</th><th>Due Date</th><th>Total</th><th>Remaining Due</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         ${invoices.map(inv => {
                             const _advP = Number(inv.advancePayment || 0);
                             const _amtDue = Number(inv.amountDue != null ? inv.amountDue : (inv.total - _advP));
                             const _remaining = Math.max(0, _amtDue - Number(inv.paidAmount || 0));
+                            const invCurrency = inv.currency || 'SAR';
                             return `
                             <tr>
                                 <td>${inv.invoiceNo}</td>
                                 <td>${inv.customerName}</td>
+                                <td>${getCurrencyBadge(invCurrency)}</td>
                                 <td>${inv.date}</td>
                                 <td>${inv.dueDate || '-'}</td>
-                                <td>${formatCurrency(convertCurrency(inv.total, inv.currency))}</td>
-                                <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : formatCurrency(convertCurrency(_remaining, inv.currency))}</td>
+                                <td>
+                                    <div style="display:flex;flex-direction:column;gap:4px;">
+                                        <span>${formatCurrencyWithSymbol(inv.total, invCurrency)}</span>
+                                        ${invCurrency !== 'SAR' ? `<span style="font-size:11px;color:var(--text-secondary);">= SR ${(inv.total / exchangeRates[invCurrency]).toFixed(2)}</span>` : ''}
+                                    </div>
+                                </td>
+                                <td>${inv.status === 'Paid' ? `<span style="color:var(--success-color,#22c55e);font-weight:600;">—</span>` : `<div style="display:flex;flex-direction:column;gap:4px;"><span>${formatCurrencyWithSymbol(_remaining, invCurrency)}</span>${invCurrency !== 'SAR' ? `<span style="font-size:11px;color:var(--text-secondary);">= SR ${(_remaining / exchangeRates[invCurrency]).toFixed(2)}</span>` : ''}</div>`}</td>
                                 <td><span class="status ${inv.status}">${inv.status}</span></td>
                                 <td style="text-align:center;">
                                     <div class="action-dropdown">
@@ -4659,7 +4800,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             const qrBlockReason = getInvoiceQrBlockReason(invoice);
             if (qrBlockReason) {
-                alert(qrBlockReason);
+                toast(qrBlockReason);
                 return;
             }
             editInvoice(id);
@@ -4765,11 +4906,10 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 document.getElementById('advancePaymentInput').value = invoice.advancePayment || 0;
                 const pmSelect = document.getElementById('paymentMethodInput');
                 if (pmSelect) pmSelect.value = invoice.paymentMethod || 'Cash';
-                // Restore saved currency for this invoice
+                // Restore saved currency for this invoice (do NOT override the global currentCurrency)
                 const currSel = document.getElementById('invoiceCurrencySelect');
                 if (currSel) {
                     currSel.value = invoice.currency || currentCurrency || 'SAR';
-                    currentCurrency = currSel.value;
                 }
                 window.currentInvoiceTimestamp = invoice.timestamp || new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
                 const itemsContainer = document.getElementById('invoiceItemsTableBody');
@@ -4794,7 +4934,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         invoices = invoices.filter(i => i.id !== id);
                         window.APIClient?.showToast?.('Invoice deleted successfully', 'success');
                     } catch (error) {
-                        console.error('Invoice API delete failed:', error);
+                        console.warn('Invoice API delete failed:', error);
                         window.APIClient?.showToast?.('Failed to delete invoice. Please try again.', 'error');
                         return;
                     }
@@ -4861,11 +5001,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             const payInput = parseFloat(document.getElementById('rpAmount').value);
             if (!payInput || payInput <= 0) {
-                alert('Please enter a valid payment amount.');
+                toast('Please enter a valid payment amount.');
                 return;
             }
             if (payInput > remaining + 0.001) {
-                alert(`Payment amount cannot exceed the remaining due (${formatCurrency(convertCurrency(remaining, invoice.currency))}).`);
+                toast(`Payment amount cannot exceed the remaining due (${formatCurrency(convertCurrency(remaining, invoice.currency))}).`);
                 return;
             }
 
@@ -4924,7 +5064,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     await refreshCustomerFinancials(invoice.customerId);
                     window.APIClient?.showToast?.(`Payment of ${formatCurrencyPlain(convertCurrency(payInput, invoice.currency))} received. Invoice is now ${newStatus}.`, 'success');
                 } catch (error) {
-                    console.error('Receive payment API failed:', error);
+                    console.warn('Receive payment API failed:', error);
                     invoice.paidAmount = alreadyReceived;
                     invoice.status = alreadyReceived > 0 ? 'Partial' : 'Unpaid';
                     window.APIClient?.showToast?.('Failed to save payment. Please try again.', 'error');
@@ -4934,7 +5074,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             } else {
                 await refreshCustomerFinancials(invoice.customerId);
                 saveData();
-                alert(`Payment of ${formatCurrencyPlain(convertCurrency(payInput, invoice.currency))} received. Invoice is now ${newStatus}.`);
+                toast(`Payment of ${formatCurrencyPlain(convertCurrency(payInput, invoice.currency))} received. Invoice is now ${newStatus}.`);
             }
 
             closeReceivePaymentModal();
@@ -4990,7 +5130,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         await refreshCustomerFinancials(invoice.customerId);
                         window.APIClient?.showToast?.('Invoice marked as paid', 'success');
                     } catch (error) {
-                        console.error('Invoice API update failed:', error);
+                        console.warn('Invoice API update failed:', error);
                         invoice.status = 'Unpaid'; // revert optimistic status change
                         window.APIClient?.showToast?.('Failed to mark invoice as paid. Please try again.', 'error');
                         return;
@@ -5015,7 +5155,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 // Sync in background without blocking UI
                 syncQuotationsFromApi()
                     .then(() => renderQuotations())
-                    .catch(error => console.error('Failed to sync quotations from API.', error));
+                    .catch(error => console.warn('Failed to sync quotations from API.', error));
             }
         }
 
@@ -5128,7 +5268,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         saveData();
                         window.APIClient?.showToast?.('Quotation updated locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Failed to update quotation status in API.', error);
+                        console.warn('Failed to update quotation status in API.', error);
                     }
                 }
             } else {
@@ -5143,6 +5283,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             document.getElementById('quotationFormTitle').innerText = id ? 'View Quotation' : 'Create Quotation';
             renderQuotationCustomerSelect();
             document.getElementById('quotationDate').value = new Date().toISOString().split('T')[0];
+            // Sync currency selector
+            const qCurrSel = document.getElementById('quotationCurrencySelect');
             const itemsContainer = document.getElementById('quotationItemsInputContainer');
             itemsContainer.innerHTML = '';
             quotationItemCounter = 0;
@@ -5152,6 +5294,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     document.getElementById('quotationNoDisplay').value = quotation.quotationNo;
                     document.getElementById('quotationDate').value = quotation.date || new Date().toISOString().split('T')[0];
                     document.getElementById('quotationCustomerSelect').value = quotation.customerName;
+                    // Restore saved currency (or fall back to global)
+                    if (qCurrSel) qCurrSel.value = quotation.currency || currentCurrency;
                     if (quotation.items && quotation.items.length) {
                         quotation.items.forEach(item => {
                             addQuotationItemInput(item);
@@ -5163,6 +5307,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             } else {
                 generateQuotationNumber();
                 document.getElementById('quotationCustomerSelect').value = '';
+                if (qCurrSel) qCurrSel.value = currentCurrency;
                 addQuotationItemInput();
             }
             updateQuotationPreview();
@@ -5175,12 +5320,12 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         async function saveQuotation() {
             const customerName = document.getElementById('quotationCustomerSelect').value;
             if (!customerName) {
-                alert('Please select a customer');
+                toast('Please select a customer');
                 return;
             }
             const items = getQuotationItemsFromInputs();
             if (items.length === 0) {
-                alert('Please add at least one quotation item');
+                toast('Please add at least one quotation item');
                 return;
             }
             const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.price * (1 - item.discount / 100)), 0);
@@ -5192,7 +5337,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 subtotal: subtotal,
                 total: subtotal,
                 date: document.getElementById('quotationDate').value || new Date().toISOString().split('T')[0],
-                status: 'Uninvoiced'
+                status: 'Uninvoiced',
+                currency: document.getElementById('quotationCurrencySelect')?.value || currentCurrency
             };
             
             if (isApiEnabled()) {
@@ -5221,7 +5367,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         saveData();
                         window.APIClient?.showToast?.('Quotation saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Failed to save quotation in API.', error);
+                        console.warn('Failed to save quotation in API.', error);
                         window.APIClient?.showToast?.('Failed to save quotation: ' + (message || 'Please try again.'), 'error');
                         return;
                     }
@@ -5303,7 +5449,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         saveData();
                         window.APIClient?.showToast?.('Quotation deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Failed to delete quotation from API.', error);
+                        console.warn('Failed to delete quotation from API.', error);
                         window.APIClient?.showToast?.('Failed to delete quotation. Please try again.', 'error');
                         return;
                     }
@@ -5328,7 +5474,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 const body = `Dear ${customerName},\n\nPlease find attached our quotation.\n\nBest regards,\n${readStoredJson('pro_invoice_settings', {}).companyName || 'Company'}`;
                 window.open(`mailto:${customer.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
             } else {
-                alert('Customer email not found');
+                toast('Customer email not found');
             }
         }
 
@@ -5339,7 +5485,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 const message = `Dear ${customerName},\n\nPlease find our quotation ${document.getElementById('quotationNoDisplay').value}.\n\nBest regards,\n${readStoredJson('pro_invoice_settings', {}).companyName || 'Company'}`;
                 window.open(`https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`);
             } else {
-                alert('Customer phone not found');
+                toast('Customer phone not found');
             }
         }
 
@@ -5373,7 +5519,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     initializeReportFilters();
                     filterReports();
                 }).catch(error => {
-                    console.error('Reports API refresh failed:', error);
+                    console.warn('Reports API refresh failed:', error);
                     updateReportDataSourceStatus('API refresh failed, using local cache');
                 });
             }
@@ -5487,9 +5633,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             var kpiGrid = document.getElementById('dailyKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Today\'s Sales',    formatCurrency(todaySales),    'fas fa-dollar-sign',       ''],
-                ['Today\'s Expenses', formatCurrency(todayExpTotal), 'fas fa-receipt',           ''],
-                ['Net Profit',        formatCurrency(todayProfit),   'fas fa-sack-dollar',        todayProfit >= 0 ? 'color:var(--success-color,#28a745)' : 'color:#dc3545'],
+                ['Today\'s Sales',    formatCurrency(convertCurrency(todaySales)),    'fas fa-dollar-sign',       ''],
+                ['Today\'s Expenses', formatCurrency(convertCurrency(todayExpTotal)), 'fas fa-receipt',           ''],
+                ['Net Profit',        formatCurrency(convertCurrency(todayProfit)),   'fas fa-sack-dollar',        todayProfit >= 0 ? 'color:var(--success-color,#28a745)' : 'color:#dc3545'],
                 ['Invoices Today',    todayInvoices.length,          'fas fa-file-invoice-dollar','']
             ].map(function(k) {
                 return '<div class="report-kpi-card"><span>' + k[0] + '</span><strong style="' + k[3] + '">' + k[1] + '</strong><small>' + k[2].replace('fas ','') + '</small></div>';
@@ -5566,9 +5712,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var totalProfit = totalSales - totalExp;
             var kpiGrid = document.getElementById('monthlyKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Total Sales ' + year,    formatCurrency(totalSales),   ''],
-                ['Total Expenses ' + year, formatCurrency(totalExp),     ''],
-                ['Net Profit ' + year,     formatCurrency(totalProfit),  totalProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
+                ['Total Sales ' + year,    formatCurrency(convertCurrency(totalSales)),   ''],
+                ['Total Expenses ' + year, formatCurrency(convertCurrency(totalExp)),     ''],
+                ['Net Profit ' + year,     formatCurrency(convertCurrency(totalProfit)),  totalProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
                 ['Total Invoices ' + year, totalInv,                     '']
             ].map(function(k){
                 return '<div class="report-kpi-card"><span>'+k[0]+'</span><strong style="'+k[2]+'">'+k[1]+'</strong></div>';
@@ -5597,17 +5743,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (tbody) {
                 tbody.innerHTML = months.map(function(m) {
                     var profitColor = m.profit >= 0 ? '#28a745' : '#dc3545';
-                    return '<tr><td>' + m.label + '</td><td>' + formatCurrency(m.sales) + '</td>' +
-                           '<td>' + formatCurrency(m.exp) + '</td>' +
-                           '<td style="color:'+profitColor+';font-weight:600">' + formatCurrency(m.profit) + '</td>' +
+                    return '<tr><td>' + m.label + '</td><td>' + formatCurrency(convertCurrency(m.sales)) + '</td>' +
+                           '<td>' + formatCurrency(convertCurrency(m.exp)) + '</td>' +
+                           '<td style="color:'+profitColor+';font-weight:600">' + formatCurrency(convertCurrency(m.profit)) + '</td>' +
                            '<td>' + m.invoices + '</td><td>' + m.margin + '%</td></tr>';
                 }).join('');
             }
             var tfoot = document.getElementById('monthlyReportTableFoot');
             var totMargin = totalSales>0 ? ((totalProfit/totalSales)*100).toFixed(1):'0.0';
             if (tfoot) tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-primary)">' +
-                '<td>Total</td><td>' + formatCurrency(totalSales) + '</td><td>' + formatCurrency(totalExp) + '</td>' +
-                '<td style="color:' + (totalProfit>=0?'#28a745':'#dc3545') + '">' + formatCurrency(totalProfit) + '</td>' +
+                '<td>Total</td><td>' + formatCurrency(convertCurrency(totalSales)) + '</td><td>' + formatCurrency(convertCurrency(totalExp)) + '</td>' +
+                '<td style="color:' + (totalProfit>=0?'#28a745':'#dc3545') + '">' + formatCurrency(convertCurrency(totalProfit)) + '</td>' +
                 '<td>' + totalInv + '</td><td>' + totMargin + '%</td></tr>';
         }
 
@@ -5624,9 +5770,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             var kpiGrid = document.getElementById('profitKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Total Revenue',   formatCurrency(totalRev),   ''],
-                ['Total Expenses',  formatCurrency(totalExp),   ''],
-                ['Net Profit',      formatCurrency(netProfit),  netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
+                ['Total Revenue',   formatCurrency(convertCurrency(totalRev)),   ''],
+                ['Total Expenses',  formatCurrency(convertCurrency(totalExp)),   ''],
+                ['Net Profit',      formatCurrency(convertCurrency(netProfit)),  netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
                 ['Profit Margin',   margin + '%',               netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545']
             ].map(function(k){
                 return '<div class="report-kpi-card"><span>'+k[0]+'</span><strong style="'+k[2]+'">'+k[1]+'</strong></div>';
@@ -5661,8 +5807,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     tbody.innerHTML = rows.map(function(r) {
                         var m = r.revenue > 0 ? ((r.profit/r.revenue)*100).toFixed(1) : '0.0';
                         var c = r.profit >= 0 ? '#28a745' : '#dc3545';
-                        return '<tr><td>' + escapeHtml(r.name) + '</td><td>' + formatCurrency(r.revenue) + '</td>' +
-                               '<td style="color:'+c+';font-weight:600">' + formatCurrency(r.profit) + '</td>' +
+                        return '<tr><td>' + escapeHtml(r.name) + '</td><td>' + formatCurrency(convertCurrency(r.revenue)) + '</td>' +
+                               '<td style="color:'+c+';font-weight:600">' + formatCurrency(convertCurrency(r.profit)) + '</td>' +
                                '<td style="color:'+c+'">' + m + '%</td></tr>';
                     }).join('');
                 }
@@ -5682,8 +5828,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             var kpiGrid = document.getElementById('expenseKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Total Expenses',    formatCurrency(totalExp),       ''],
-                ['Daily Average',     formatCurrency(avgPerDay),      ''],
+                ['Total Expenses',    formatCurrency(convertCurrency(totalExp)),       ''],
+                ['Daily Average',     formatCurrency(convertCurrency(avgPerDay)),      ''],
                 ['Top Category',      escapeHtml(topCat),             ''],
                 ['Expense Count',     stats.filteredExpenses.length,  '']
             ].map(function(k){
@@ -5741,7 +5887,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 } else {
                     catBody.innerHTML = catRows.map(function(r) {
                         var pct = totalExp > 0 ? ((r.amount/totalExp)*100).toFixed(1) : '0.0';
-                        return '<tr><td>' + escapeHtml(r.category) + '</td><td>' + formatCurrency(r.amount) + '</td><td>' + pct + '%</td></tr>';
+                        return '<tr><td>' + escapeHtml(r.category) + '</td><td>' + formatCurrency(convertCurrency(r.amount)) + '</td><td>' + pct + '%</td></tr>';
                     }).join('');
                 }
             }
@@ -5758,7 +5904,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var netProfit = revenue - totalExpenses;
 
             function plRow(label, val, cls, indent) {
-                var formatted = typeof val === 'number' ? formatCurrency(Math.abs(val)) : val;
+                var formatted = typeof val === 'number' ? formatCurrency(convertCurrency(Math.abs(val))) : val;
                 var sign = (typeof val === 'number' && val < 0) ? '-' : '';
                 return '<div class="pl-row' + (cls?' '+cls:'') + (indent?' indent':'') + '">' +
                        '<span>' + label + '</span><span>' + sign + formatted + '</span></div>';
@@ -5784,7 +5930,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             html += '<div class="pl-section-title">' + (netProfit >= 0 ? 'Net Profit' : 'Net Loss') + '</div>';
             html += '<div class="pl-row total">' +
                     '<span>' + (netProfit >= 0 ? 'Net Profit' : 'Net Loss') + '</span>' +
-                    '<span>' + formatCurrency(Math.abs(netProfit)) + '</span></div>';
+                    '<span>' + formatCurrency(convertCurrency(Math.abs(netProfit))) + '</span></div>';
 
             var container = document.getElementById('plStatement');
             if (container) container.innerHTML = html;
@@ -5822,9 +5968,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             function bsSection(title, rows, totalLabel, totalVal, totalColor) {
                 var html = '<div class="pl-section-title">' + title + '</div>';
                 rows.forEach(function(r){
-                    html += '<div class="pl-row indent"><span>' + r[0] + '</span><span>' + formatCurrency(r[1]) + '</span></div>';
+                    html += '<div class="pl-row indent"><span>' + r[0] + '</span><span>' + formatCurrency(convertCurrency(r[1])) + '</span></div>';
                 });
-                html += '<div class="pl-row subtotal"><span>' + totalLabel + '</span><span>' + formatCurrency(totalVal) + '</span></div>';
+                html += '<div class="pl-row subtotal"><span>' + totalLabel + '</span><span>' + formatCurrency(convertCurrency(totalVal)) + '</span></div>';
                 return html;
             }
 
@@ -5834,7 +5980,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                  ['Accounts Receivable', receivables],
                  ['Inventory Value', inventoryValue]],
                 'Total Assets', totalAssets, '#28a745');
-            assetsHtml += '<div class="pl-row total"><span>Total Assets</span><span>' + formatCurrency(totalAssets) + '</span></div>';
+            assetsHtml += '<div class="pl-row total"><span>Total Assets</span><span>' + formatCurrency(convertCurrency(totalAssets)) + '</span></div>';
 
             var liabEqHtml = '<h3 style="font-size:16px;font-weight:700;margin-bottom:12px;color:#dc3545"><i class="fas fa-file-invoice-dollar"></i> Liabilities &amp; Equity</h3>';
             liabEqHtml += bsSection('Liabilities',
@@ -5843,7 +5989,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             liabEqHtml += bsSection('Equity',
                 [['Net Assets (Owner\'s Equity)', equity]],
                 'Total Equity', equity, equity>=0?'#28a745':'#dc3545');
-            liabEqHtml += '<div class="pl-row total"><span>Liabilities + Equity</span><span>' + formatCurrency(totalLiabilities + equity) + '</span></div>';
+            liabEqHtml += '<div class="pl-row total"><span>Liabilities + Equity</span><span>' + formatCurrency(convertCurrency(totalLiabilities + equity)) + '</span></div>';
 
             var assetsEl = document.getElementById('bsAssets');
             var liabEl = document.getElementById('bsLiabilitiesEquity');
@@ -5855,7 +6001,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var checkEl = document.getElementById('bsBalanceCheck');
             if (checkEl) {
                 checkEl.innerHTML = diff < 0.01
-                    ? '<i class="fas fa-check-circle" style="color:#28a745;font-size:24px;"></i><p style="color:#28a745;font-weight:700;margin-top:8px;">Balance Sheet is Balanced ✓</p><small style="color:var(--text-secondary)">Total Assets = Total Liabilities + Equity (' + formatCurrency(totalAssets) + ')</small>'
+                    ? '<i class="fas fa-check-circle" style="color:#28a745;font-size:24px;"></i><p style="color:#28a745;font-weight:700;margin-top:8px;">Balance Sheet is Balanced ✓</p><small style="color:var(--text-secondary)">Total Assets = Total Liabilities + Equity (' + formatCurrency(convertCurrency(totalAssets)) + ')</small>'
                     : '<i class="fas fa-exclamation-circle" style="color:#ffc107;font-size:24px;"></i><p style="color:#ffc107;font-weight:600;margin-top:8px;">Note: Simplified view — some items may not be tracked in the system</p>';
             }
         }
@@ -6409,13 +6555,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function renderReportOverview(stats) {
-            setReportValue('reportTotalSales', formatCurrency(stats.totalSales));
-            setReportValue('reportTotalExpenses', formatCurrency(stats.totalExpenses));
-            setReportValue('reportNetProfit', formatCurrency(stats.netProfit));
+            setReportValue('reportTotalSales', formatCurrency(convertCurrency(stats.totalSales)));
+            setReportValue('reportTotalExpenses', formatCurrency(convertCurrency(stats.totalExpenses)));
+            setReportValue('reportNetProfit', formatCurrency(convertCurrency(stats.netProfit)));
             setReportValue('reportTotalInvoices', String(stats.totalInvoices));
-            setReportValue('reportDailySales', formatCurrency(stats.dailySales));
-            setReportValue('reportMonthlySales', formatCurrency(stats.monthlySales));
-            setReportValue('reportYearlySales', formatCurrency(stats.yearlySales));
+            setReportValue('reportDailySales', formatCurrency(convertCurrency(stats.dailySales)));
+            setReportValue('reportMonthlySales', formatCurrency(convertCurrency(stats.monthlySales)));
+            setReportValue('reportYearlySales', formatCurrency(convertCurrency(stats.yearlySales)));
             setReportValue('reportSalesGrowth', `${stats.growth.percent >= 0 ? '+' : ''}${stats.growth.percent.toFixed(1)}%`);
             setReportValue('reportSalesGrowthMeta', stats.growth.label);
             setReportValue('reportActiveRangeLabel', stats.rangeLabel);
@@ -6431,7 +6577,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function renderReportTables(stats) {
             renderReportList('reportExpenseBreakdownList', stats.expenseStats.rows.slice(0, 6), row => ({
                 title: row.category,
-                value: formatCurrency(row.amount),
+                value: formatCurrency(convertCurrency(row.amount)),
                 meta: 'Expense category total'
             }), 'No expense records found.');
 
@@ -6439,7 +6585,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 { title: 'Total Employees', value: String(stats.hrStats.totalEmployees), meta: 'Active employees in HR database' },
                 { title: 'Attendance Summary', value: `${stats.hrStats.attendance.present} Present / ${stats.hrStats.attendance.late} Late / ${stats.hrStats.attendance.absent} Absent`, meta: 'Selected period attendance' },
                 { title: 'Leave Requests', value: String(stats.hrStats.totalLeaves), meta: stats.hrStats.leaveByType.map(item => `${item.type}: ${item.count}`).join(' | ') || 'No leave records' },
-                { title: 'Monthly Salary Expense', value: formatCurrency(stats.hrStats.salaryExpense), meta: 'Current payroll baseline' },
+                { title: 'Monthly Salary Expense', value: formatCurrency(convertCurrency(stats.hrStats.salaryExpense)), meta: 'Current payroll baseline' },
                 { title: 'Overtime Hours', value: `${stats.hrStats.totalOvertimeHours.toFixed(2)} h`, meta: 'Total overtime in selected period' }
             ], row => row, 'No HR data available.');
 
@@ -6459,18 +6605,18 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 { title: 'Paid Invoices', value: String(stats.paidInvoices), meta: 'Settled invoices in selected range' },
                 { title: 'Pending Invoices', value: String(stats.pendingInvoices), meta: 'Awaiting payment' },
                 { title: 'Overdue Invoices', value: String(stats.overdueInvoices), meta: 'Past due date and unpaid' },
-                { title: 'Average Invoice Value', value: formatCurrency(stats.averageInvoiceValue), meta: 'Average billing size' }
+                { title: 'Average Invoice Value', value: formatCurrency(convertCurrency(stats.averageInvoiceValue)), meta: 'Average billing size' }
             ], row => row, 'No invoice data available.');
 
             renderReportList('reportVatSummaryList', [
-                { title: 'Total VAT Collected', value: formatCurrency(stats.vatStats.totalVat), meta: 'VAT from selected invoices' },
-                { title: 'Average VAT Per Invoice', value: formatCurrency(stats.vatStats.averageVat), meta: 'Average VAT loading' },
-                ...stats.vatStats.rows.slice(0, 3).map(row => ({ title: row.invoiceNo, value: formatCurrency(row.vat), meta: row.customerName }))
+                { title: 'Total VAT Collected', value: formatCurrency(convertCurrency(stats.vatStats.totalVat)), meta: 'VAT from selected invoices' },
+                { title: 'Average VAT Per Invoice', value: formatCurrency(convertCurrency(stats.vatStats.averageVat)), meta: 'Average VAT loading' },
+                ...stats.vatStats.rows.slice(0, 3).map(row => ({ title: row.invoiceNo, value: formatCurrency(convertCurrency(row.vat)), meta: row.customerName }))
             ], row => row, 'No VAT records found.');
 
             renderReportList('reportVatMonthlySummaryList', stats.vatStats.monthlyRows, row => ({
                 title: row.month,
-                value: formatCurrency(row.vat),
+                value: formatCurrency(convertCurrency(row.vat)),
                 meta: 'Monthly VAT'
             }), 'No monthly VAT summary available.');
 
@@ -6483,7 +6629,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const vatTableBody = document.getElementById('reportVatInvoiceTableBody');
             if (vatTableBody) {
                 vatTableBody.innerHTML = stats.vatStats.rows.map(row =>
-                    `<tr><td>${escapeHtml(row.invoiceNo)}</td><td>${escapeHtml(row.customerName)}</td><td>${formatCurrency(row.vat)}</td></tr>`
+                    `<tr><td>${escapeHtml(row.invoiceNo)}</td><td>${escapeHtml(row.customerName)}</td><td>${formatCurrency(convertCurrency(row.vat))}</td></tr>`
                 ).join('') || '<tr><td colspan="3">No VAT per invoice data.</td></tr>';
             }
 
@@ -6491,7 +6637,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (customerTableBody) {
                 customerTableBody.innerHTML = stats.customerStats.rows.map(row => {
                     const share = stats.totalSales > 0 ? `${((row.total / stats.totalSales) * 100).toFixed(1)}%` : '0%';
-                    return `<tr><td>${escapeHtml(row.name)}</td><td>${row.invoices}</td><td>${formatCurrency(row.total)}</td><td>${share}</td></tr>`;
+                    return `<tr><td>${escapeHtml(row.name)}</td><td>${row.invoices}</td><td>${formatCurrency(convertCurrency(row.total))}</td><td>${share}</td></tr>`;
                 }).join('') || '<tr><td colspan="4">No customer sales data.</td></tr>';
             }
 
@@ -6499,7 +6645,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (topCustomersTableBody) {
                 topCustomersTableBody.innerHTML = stats.customerStats.topCustomers.map(row => {
                     const share = stats.totalSales > 0 ? `${((row.total / stats.totalSales) * 100).toFixed(1)}%` : '0%';
-                    return `<tr><td>${escapeHtml(row.name)}</td><td>${row.invoices}</td><td>${formatCurrency(row.total)}</td><td>${share}</td></tr>`;
+                    return `<tr><td>${escapeHtml(row.name)}</td><td>${row.invoices}</td><td>${formatCurrency(convertCurrency(row.total))}</td><td>${share}</td></tr>`;
                 }).join('') || '<tr><td colspan="4">No top customer data.</td></tr>';
             }
 
@@ -6529,8 +6675,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         `<tr>
                             <td>${escapeHtml(row.name)}</td>
                             <td>${row.quantity.toFixed(2)}</td>
-                            <td>${formatCurrency(row.revenue)}</td>
-                            <td>${formatCurrency(row.profit)}</td>
+                            <td>${formatCurrency(convertCurrency(row.revenue))}</td>
+                            <td>${formatCurrency(convertCurrency(row.profit))}</td>
                         </tr>`
                     ).join('') || '<tr><td colspan="4">No product performance data.</td></tr>';
             }
@@ -6879,11 +7025,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const rangeLabel = escapeHtml(stats.rangeLabel || 'N/A');
 
             const invoiceRows = stats.vatStats.rows.map(row =>
-                `<tr><td>${escapeHtml(row.invoiceNo)}</td><td>${escapeHtml(row.customerName)}</td><td>${formatCurrency(row.vat)}</td></tr>`
+                `<tr><td>${escapeHtml(row.invoiceNo)}</td><td>${escapeHtml(row.customerName)}</td><td>${formatCurrency(convertCurrency(row.vat))}</td></tr>`
             ).join('') || '<tr><td colspan="3">No VAT per invoice data</td></tr>';
 
             const monthlyRows = stats.vatStats.monthlyRows.map(row =>
-                `<tr><td>${escapeHtml(row.month)}</td><td>${formatCurrency(row.vat)}</td></tr>`
+                `<tr><td>${escapeHtml(row.month)}</td><td>${formatCurrency(convertCurrency(row.vat))}</td></tr>`
             ).join('') || '<tr><td colspan="2">No monthly VAT data</td></tr>';
 
             const w = window.open('', '_blank', 'width=1000,height=820');
@@ -6905,8 +7051,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 <h1>Tax / VAT Report (Saudi)</h1>
 <div class="meta">Range: ${rangeLabel} | Useful for ZATCA reporting</div>
 <div class="kpi-wrap">
-  <div class="card"><div>Total VAT Collected</div><div class="kpi">${formatCurrency(stats.vatStats.totalVat)}</div></div>
-  <div class="card"><div>Average VAT Per Invoice</div><div class="kpi">${formatCurrency(stats.vatStats.averageVat)}</div></div>
+  <div class="card"><div>Total VAT Collected</div><div class="kpi">${formatCurrency(convertCurrency(stats.vatStats.totalVat))}</div></div>
+  <div class="card"><div>Average VAT Per Invoice</div><div class="kpi">${formatCurrency(convertCurrency(stats.vatStats.averageVat))}</div></div>
 </div>
 <div class="card"><h3>VAT Trend</h3>${vatImg ? `<img class="chart" src="${vatImg}" alt="VAT trend chart">` : '<p>No chart</p>'}</div>
 <div class="card" style="margin-top:12px;"><h3>VAT Per Invoice</h3><table><thead><tr><th>Invoice</th><th>Customer</th><th>VAT</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
@@ -6954,7 +7100,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
 <div class="grid">
     <div class="card"><div>Total Employees</div><div class="kpi">${stats.hrStats.totalEmployees}</div></div>
-    <div class="card"><div>Monthly Salary Expense</div><div class="kpi">${formatCurrency(stats.hrStats.salaryExpense)}</div></div>
+    <div class="card"><div>Monthly Salary Expense</div><div class="kpi">${formatCurrency(convertCurrency(stats.hrStats.salaryExpense))}</div></div>
     <div class="card"><div>Attendance (P/L/A)</div><div class="kpi">${stats.hrStats.attendance.present} / ${stats.hrStats.attendance.late} / ${stats.hrStats.attendance.absent}</div></div>
     <div class="card"><div>Total Overtime</div><div class="kpi">${stats.hrStats.totalOvertimeHours.toFixed(2)} h</div></div>
 </div>
@@ -7102,7 +7248,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 pendingCompanyLogoData = dataUrl;
                 try { localStorage.setItem(LS_LOGO_KEY, dataUrl); } catch(ex) {}
             } catch (error) {
-                alert(`Failed to read selected image: ${error?.message || error}`);
+                toast(`Failed to read selected image: ${error?.message || error}`);
             }
         }
 
@@ -7173,7 +7319,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             }
 
             if (!url) {
-                alert('Could not extract a file ID from that link. Make sure you copied a Google Drive file share link.');
+                toast('Could not extract a file ID from that link. Make sure you copied a Google Drive file share link.');
                 return;
             }
             pendingCompanyLogoData = '';
@@ -7485,7 +7631,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
         async function saveSalesman() {
             const name = document.getElementById('salesmanName').value.trim();
-            if (!name) { alert('Salesman name is required.'); return; }
+            if (!name) { toast('Salesman name is required.'); return; }
             const phone = document.getElementById('salesmanPhone').value.trim();
             const email = document.getElementById('salesmanEmail').value.trim();
             const commission = parseFloat(document.getElementById('salesmanCommission').value) || 0;
@@ -7493,11 +7639,11 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const password = document.getElementById('salesmanPassword').value;
             const editId = document.getElementById('salesmanEditId').value;
 
-            if (!username) { alert('Username is required for login.'); return; }
+            if (!username) { toast('Username is required for login.'); return; }
 
             // Check username uniqueness (excluding the salesman being edited)
             const duplicate = salesmen.find(s => s.username === username && s.id !== editId);
-            if (duplicate) { alert('That username is already taken by another salesman.'); return; }
+            if (duplicate) { toast('That username is already taken by another salesman.'); return; }
 
             if (editId) {
                 const idx = salesmen.findIndex(s => s.id === editId);
@@ -7505,13 +7651,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 const existing = salesmen[idx];
                 let passwordHash = existing.passwordHash || '';
                 if (password) {
-                    if (password.length < 6) { alert('Password must be at least 6 characters.'); return; }
+                    if (password.length < 6) { toast('Password must be at least 6 characters.'); return; }
                     passwordHash = await sha256(password);
                 }
                 salesmen[idx] = { ...existing, name, phone, email, commission, username, passwordHash };
             } else {
-                if (!password) { alert('Password is required.'); return; }
-                if (password.length < 6) { alert('Password must be at least 6 characters.'); return; }
+                if (!password) { toast('Password is required.'); return; }
+                if (password.length < 6) { toast('Password must be at least 6 characters.'); return; }
                 const passwordHash = await sha256(password);
                 salesmen.push({ id: `sm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, phone, email, commission, username, passwordHash });
             }
@@ -7569,8 +7715,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     settings.companyLogo = await uploadCompanyLogoToApi(logoDataUrl, logoDriveFolderId, logoInput.files[0].name || 'company-logo.png');
                 }
             } catch (error) {
-                console.error('Failed to upload company logo.', error);
-                alert(`Logo upload failed: ${error.message || error}`);
+                console.warn('Failed to upload company logo.', error);
+                toast(`Logo upload failed: ${error.message || error}`);
                 return;
             }
 
@@ -7609,7 +7755,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     await saveSettingsToApi(settings);
                     window.APIClient?.showToast?.('Settings saved & synced to Google Sheets ✓', 'success');
                 } catch (error) {
-                    console.error('Failed to sync settings to Google Sheets.', error);
+                    console.warn('Failed to sync settings to Google Sheets.', error);
                     window.APIClient?.showToast?.('Settings saved locally but failed to sync to Google Sheets. Check API URL.', 'error');
                 }
             } else {
@@ -7636,9 +7782,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             currentCurrency = currency;
             try { localStorage.setItem('pro_invoice_currency', currency); } catch(e) {}
             document.querySelectorAll('.currency-btn').forEach(btn => btn.classList.remove('active'));
-            // Sync report currency selector
+            // Sync both currency selectors so invoice form and reports stay in sync
             const repSel = document.getElementById('reportCurrencySelect');
             if (repSel) repSel.value = currency;
+            const invSel = document.getElementById('invoiceCurrencySelect');
+            if (invSel) invSel.value = currency;
+            const qSel = document.getElementById('quotationCurrencySelect');
+            if (qSel) qSel.value = currency;
             if (button && button.classList) {
                 button.classList.add('active');
             } else {
@@ -7682,6 +7832,78 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 return `<span style="display:inline-flex;align-items:center;gap:6px;"><img src="${saudiRiyalSymbolPath}" alt="SR" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;"> <span>${num.toFixed(2)}</span></span>`;
             }
             return formatCurrencyPlain(num);
+        }
+
+        // ==================== ENHANCED CURRENCY FUNCTIONS ====================
+        // Get currency metadata (symbol, color, name)
+        function getCurrencyInfo(currencyCode) {
+            const info = {
+                SAR: { symbol: '﷼', name: 'Saudi Riyal', color: '#2ecc71', bgColor: 'rgba(46, 204, 113, 0.1)' },
+                BDT: { symbol: '৳', name: 'Bangladeshi Taka', color: '#3498db', bgColor: 'rgba(52, 152, 219, 0.1)' },
+                USD: { symbol: '$', name: 'US Dollar', color: '#e74c3c', bgColor: 'rgba(231, 76, 60, 0.1)' },
+                EUR: { symbol: '€', name: 'Euro', color: '#f39c12', bgColor: 'rgba(243, 156, 18, 0.1)' }
+            };
+            return info[currencyCode] || { symbol: currencyCode, name: currencyCode, color: '#95a5a6', bgColor: 'rgba(149, 165, 166, 0.1)' };
+        }
+
+        // Format amount with currency symbol: "৳ 5000"
+        function formatCurrencyWithSymbol(amount, currency) {
+            const num = isFinite(Number(amount)) ? Number(amount) : 0;
+            const info = getCurrencyInfo(currency);
+            return `${info.symbol} ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        // Format currency pair: "৳ 5000 = 155 SAR"
+        function formatCurrencyPair(originalAmount, originalCurrency, exchangeRate, convertedAmount) {
+            const origInfo = getCurrencyInfo(originalCurrency);
+            const convertedInfo = getCurrencyInfo('SAR');
+            const origNum = isFinite(Number(originalAmount)) ? Number(originalAmount) : 0;
+            const convNum = isFinite(Number(convertedAmount)) ? Number(convertedAmount) : 0;
+            return `${origInfo.symbol} ${origNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = ${convertedInfo.symbol} ${convNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        // Get HTML currency badge: colored label with symbol
+        function getCurrencyBadge(currency) {
+            const info = getCurrencyInfo(currency);
+            return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;background:${info.bgColor};color:${info.color};font-weight:600;font-size:12px;"><span style="font-size:14px;">${info.symbol}</span> ${currency}</span>`;
+        }
+
+        // Format full conversion details: "৳ 5000 BDT (Rate: 0.031) = 155 SAR"
+        function formatCurrencyConversion(originalAmount, originalCurrency, exchangeRate, convertedAmount) {
+            if (originalCurrency === 'SAR') {
+                return formatCurrencyWithSymbol(originalAmount, originalCurrency);
+            }
+            const origInfo = getCurrencyInfo(originalCurrency);
+            const rate = isFinite(Number(exchangeRate)) ? Number(exchangeRate) : 1;
+            const origNum = isFinite(Number(originalAmount)) ? Number(originalAmount) : 0;
+            const convNum = isFinite(Number(convertedAmount)) ? Number(convertedAmount) : 0;
+            return `${origInfo.symbol} ${origNum.toFixed(2)} ${originalCurrency} (Rate: ${rate.toFixed(4)}) = SR ${convNum.toFixed(2)}`;
+        }
+
+        // Format conversion preview for forms: shows live conversion
+        function formatConversionPreview(amount, fromCurrency) {
+            if (!fromCurrency || fromCurrency === 'SAR') {
+                return { original: `SR ${(Number(amount) || 0).toFixed(2)}`, converted: `SR ${(Number(amount) || 0).toFixed(2)}`, rate: 1 };
+            }
+            const rate = exchangeRates[fromCurrency] || 1;
+            const convertedAmount = (Number(amount) || 0) / rate;
+            const origInfo = getCurrencyInfo(fromCurrency);
+            return {
+                original: `${origInfo.symbol} ${(Number(amount) || 0).toFixed(2)}`,
+                converted: `SR ${convertedAmount.toFixed(2)}`,
+                rate: rate
+            };
+        }
+
+        // Format transaction display with original and converted amounts
+        function formatTransactionAmount(amount, currency) {
+            if (!currency || currency === 'SAR') {
+                return `<span style="font-weight:600;">SR ${(Number(amount) || 0).toFixed(2)}</span>`;
+            }
+            const rate = exchangeRates[currency] || 1;
+            const converted = (Number(amount) || 0) / rate;
+            const info = getCurrencyInfo(currency);
+            return `<div style="display:flex;flex-direction:column;gap:4px;"><span style="font-weight:600;">${info.symbol} ${(Number(amount) || 0).toFixed(2)}</span><span style="font-size:12px;color:var(--text-secondary);">= SR ${converted.toFixed(2)}</span></div>`;
         }
 
         function toggleDarkMode() {
@@ -7873,8 +8095,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 
                 console.log('New invoice form initialized successfully');
             } catch (error) {
-                console.error('Error creating new invoice:', error);
-                alert('Error: Could not create new invoice. Please try again.');
+                console.warn('Error creating new invoice:', error);
+                toast('Error: Could not create new invoice. Please try again.');
             }
         }
 
@@ -7888,7 +8110,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 // Sync in background, then refresh
                 Promise.all([syncCustomersFromApi(), syncInvoicesFromApi()])
                     .then(() => { updateDashboard(); updateCharts(); })
-                    .catch(error => console.error(error));
+                    .catch(error => console.warn(error));
             }
         }
 
@@ -7901,7 +8123,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 // Sync in background without blocking UI
                 syncCustomersFromApi()
                     .then(() => renderCustomers())
-                    .catch(error => console.error(error));
+                    .catch(error => console.warn(error));
             }
         }
 
@@ -7921,7 +8143,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 // Sync in background without blocking UI
                 syncHRFromApi()
                     .then(() => renderHRData())
-                    .catch(error => console.error(error));
+                    .catch(error => console.warn(error));
             }
         }
 
@@ -7978,13 +8200,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (!file) return;
 
             if (!file.type.startsWith('image/')) {
-                alert('Please select an image file.');
+                toast('Please select an image file.');
                 event.target.value = '';
                 return;
             }
 
             if (file.size > 1024 * 1024) {
-                alert('Profile photo must be 1 MB or smaller.');
+                toast('Profile photo must be 1 MB or smaller.');
                 event.target.value = '';
                 return;
             }
@@ -8015,6 +8237,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (titleEl) titleEl.textContent = 'Add Employee';
             renderEmployeePhotoPreview('');
             document.getElementById('employeeModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('hrEmployeeName')?.focus(), 50);
         }
 
         function editHREmployee(id) {
@@ -8063,6 +8286,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (photoInput) photoInput.value = '';
             renderEmployeePhotoPreview(currentEmployeePhoto);
             document.getElementById('employeeModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('hrEmployeeName')?.focus(), 50);
         }
 
         async function addHREmployee(event) {
@@ -8108,7 +8332,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const logoDriveFolderId = String(settings.companyLogoDriveFolderId || DEFAULT_LOGO_DRIVE_FOLDER_ID).trim() || DEFAULT_LOGO_DRIVE_FOLDER_ID;
 
             if (!name) {
-                alert('Employee name is required.');
+                toast('Employee name is required.');
                 return;
             }
 
@@ -8119,8 +8343,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     profilePhoto = await uploadEmployeeProfilePhotoToApi(profilePhoto, logoDriveFolderId, safeName);
                     currentEmployeePhoto = profilePhoto;
                 } catch (error) {
-                    console.error('Employee photo upload failed:', error);
-                    alert(`Employee photo upload failed: ${error.message || error}`);
+                    console.warn('Employee photo upload failed:', error);
+                    toast(`Employee photo upload failed: ${error.message || error}`);
                     return;
                 }
             }
@@ -8237,7 +8461,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Employee saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Employee API save failed:', error);
+                        console.warn('Employee API save failed:', error);
                         window.APIClient?.showToast?.('Failed to save employee: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
@@ -8279,7 +8503,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Employee deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Delete employee failed:', error);
+                        console.warn('Delete employee failed:', error);
                         window.APIClient?.showToast?.('Failed to delete employee: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
@@ -8459,7 +8683,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const status = document.getElementById('hrAttendanceStatus')?.value;
 
             if (!employeeId || !date) {
-                alert('Select employee and date for attendance.');
+                toast('Select employee and date for attendance.');
                 return;
             }
 
@@ -8495,7 +8719,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Attendance saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Attendance API save failed:', error);
+                        console.warn('Attendance API save failed:', error);
                         window.APIClient?.showToast?.('Failed to save attendance: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
@@ -8532,7 +8756,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Attendance deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Attendance delete failed:', error);
+                        console.warn('Attendance delete failed:', error);
                         window.APIClient?.showToast?.('Failed to delete attendance: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
@@ -8601,7 +8825,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const toDate = document.getElementById('hrLeaveTo')?.value;
 
             if (!employeeId || !fromDate || !toDate) {
-                alert('Select employee and leave dates.');
+                toast('Select employee and leave dates.');
                 return;
             }
 
@@ -8641,7 +8865,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Leave saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Leave API save failed:', error);
+                        console.warn('Leave API save failed:', error);
                         window.APIClient?.showToast?.('Failed to save leave: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
@@ -8680,7 +8904,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Leave deleted locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Leave delete failed:', error);
+                        console.warn('Leave delete failed:', error);
                         window.APIClient?.showToast?.('Failed to delete leave: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
@@ -8742,7 +8966,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     window.APIClient?.showToast?.(`Leave ${newStatus.toLowerCase()} successfully`, 'success');
                 } catch (error) {
                     leave.status = prevStatus;
-                    console.error('Leave status update failed:', error);
+                    console.warn('Leave status update failed:', error);
                     window.APIClient?.showToast?.('Failed to update leave status: ' + (error?.message || error), 'error');
                     renderHRData();
                     return;
@@ -8758,7 +8982,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const priority = document.getElementById('hrTaskPriority')?.value;
 
             if (!title) {
-                alert('Task title is required.');
+                toast('Task title is required.');
                 return;
             }
 
@@ -8784,7 +9008,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Task saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Task API save failed:', error);
+                        console.warn('Task API save failed:', error);
                         window.APIClient?.showToast?.('Failed to add task: ' + (message || 'Unknown error'), 'error');
                         return;
                     }
@@ -8820,7 +9044,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         saveData();
                         window.APIClient?.showToast?.('Task updated locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
-                        console.error('Task API update failed:', error);
+                        console.warn('Task API update failed:', error);
                         task.done = !task.done; // revert optimistic change
                         window.APIClient?.showToast?.('Failed to update task: ' + (message || 'Unknown error'), 'error');
                         return;
@@ -8900,7 +9124,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 // Sync in background without blocking UI
                 Promise.all([syncProductsFromApi(), syncSuppliersFromApi()])
                     .then(() => { updateSupplierOptions(); renderProducts(); })
-                    .catch(error => console.error(error));
+                    .catch(error => console.warn(error));
             }
         }
 
@@ -8955,7 +9179,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 } else {
                     value = value.trim();
                     if (field === 'name' && !value) {
-                        alert('Product name cannot be empty');
+                        toast('Product name cannot be empty');
                         renderProducts();
                         return;
                     }
@@ -8978,13 +9202,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         }
                     });
                 } else {
-                    alert('API is offline. Product changes are not stored locally; reconnect to save in Google Sheets.');
+                    toast('API is offline. Product changes are not stored locally; reconnect to save in Google Sheets.');
                     return;
                 }
                 updateSavedProductsDatalist();
                 refreshSupplierCardsIfVisible();
             } catch (error) {
-                console.error('Error updating product field:', error);
+                console.warn('Error updating product field:', error);
             }
         }
 
@@ -9043,7 +9267,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const businessName = escapeHtml(document.getElementById('businessName')?.value || settings.companyName || 'Business');
             const w = window.open('', '_blank', 'width=700,height=600');
             if (!w) {
-                alert('Unable to open print window. Please allow pop-ups for this site.');
+                toast('Unable to open print window. Please allow pop-ups for this site.');
                 return;
             }
             w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Product - ${escapeHtml(product.name)}</title>
@@ -9112,11 +9336,11 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     refreshSupplierCardsIfVisible();
                     window.APIClient?.showToast?.('Product duplicated successfully', 'success');
                 } catch (error) {
-                    console.error('Error duplicating product:', error);
+                    console.warn('Error duplicating product:', error);
                     window.APIClient?.showToast?.('Failed to duplicate product. Please try again.', 'error');
                 }
             } else {
-                alert('API is offline. Product changes are not stored locally; reconnect to duplicate in Google Sheets.');
+                toast('API is offline. Product changes are not stored locally; reconnect to duplicate in Google Sheets.');
             }
         }
 
@@ -9129,7 +9353,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     // Optimistic update: remove locally instead of re-fetching all
                     savedProducts = savedProducts.filter(p => String(p.id) !== String(id));
                 } else {
-                    alert('API is offline. Product deletions are not stored locally; reconnect to delete in Google Sheets.');
+                    toast('API is offline. Product deletions are not stored locally; reconnect to delete in Google Sheets.');
                     return;
                 }
                 updateSavedProductsDatalist();
@@ -9137,7 +9361,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 refreshSupplierCardsIfVisible();
                 window.APIClient?.showToast?.('Product deleted successfully', 'success');
             } catch (error) {
-                console.error('Error deleting product:', error);
+                console.warn('Error deleting product:', error);
                 window.APIClient?.showToast?.('Failed to delete product. Please try again.', 'error');
             }
         }
@@ -9336,7 +9560,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 const url = `https://wa.me/${customer.phone}?text=${encodeURIComponent(message)}`;
                 window.open(url, '_blank');
             } else {
-                alert('No phone number available');
+                toast('No phone number available');
             }
         }
 
@@ -9345,7 +9569,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             if (customer && customer.email) {
                 window.location.href = `mailto:${customer.email}?subject=Important Update`;
             } else {
-                alert('No email address available');
+                toast('No email address available');
             }
         }
 
@@ -9375,3 +9599,33 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
         })();
         // ===== END Direct Search Input Wiring =====
 
+        // ===== FAST DATA ENTRY: Escape closes modals, number fields auto-select =====
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                const visibleModal = document.querySelector('.modal[style*="flex"]');
+                if (visibleModal) {
+                    // Try to find a close button inside the modal
+                    const closeBtn = visibleModal.querySelector('[onclick*="close"], [onclick*="Close"]')
+                        || visibleModal.querySelector('.modal-header span[onclick], .modal-close, .close-btn');
+                    if (closeBtn) closeBtn.click();
+                    else visibleModal.style.display = 'none';
+                }
+            }
+        });
+
+        document.addEventListener('focusin', function (e) {
+            if (e.target && e.target.type === 'number') {
+                e.target.select();
+            }
+        });
+        // ===== END Fast Data Entry =====
+
+
+// ===== DEBOUNCED UI FILTERS =====
+window.debouncedFilterCustomers = debounce(filterCustomers, 300);
+window.debouncedFilterSuppliers = debounce(filterSuppliers, 300);
+window.debouncedRenderExpenses = debounce(renderExpenses, 300);
+window.debouncedFilterProducts = debounce(filterProducts, 300);
+window.debouncedFilterInvoices = debounce(filterInvoices, 300);
+window.debouncedFilterQuotations = debounce(filterQuotations, 300);
+window.debouncedRenderAccounting = debounce(renderAccounting, 300);

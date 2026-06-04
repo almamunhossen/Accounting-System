@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -244,7 +244,7 @@
                 </div>
                 
                 <div class="search-bar">
-                    <input type="text" id="customerSearchInput" class="search-input" placeholder="Search by ID, name, phone, company, or email..." oninput="filterCustomers()">
+                    <input type="text" id="customerSearchInput" class="search-input" placeholder="Search by ID, name, phone, company, or email..." oninput="debouncedFilterCustomers()">
                     <select id="tagFilter" onchange="filterCustomers()" class="search-select">
                         <option value="">All Tags</option>
                         <option value="VIP">VIP</option>
@@ -275,7 +275,7 @@
                 </div>
 
                 <div class="search-bar">
-                    <input type="text" id="supplierSearchInput" class="search-input" placeholder="Search by ID, name, phone, company, or email..." oninput="filterSuppliers()">
+                    <input type="text" id="supplierSearchInput" class="search-input" placeholder="Search by ID, name, phone, company, or email..." oninput="debouncedFilterSuppliers()">
                     <select id="supplierStatusFilter" onchange="filterSuppliers()" class="search-select">
                         <option value="">All Status</option>
                         <option value="Active">Active</option>
@@ -436,7 +436,7 @@
                     </button>
                 </div>
                 <div class="form-section" style="margin-bottom:16px;">
-                    <input type="text" id="expenseSearchInput" class="search-input" placeholder="Search by ID, description, category or date..." oninput="renderExpenses()">
+                    <input type="text" id="expenseSearchInput" class="search-input" placeholder="Search by ID, description, category or date..." oninput="debouncedRenderExpenses()">
                 </div>
                 <div id="expensesListContainer"></div>
             </div>
@@ -458,7 +458,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Search Products</label>
-                            <input type="text" id="productSearchInput" class="search-input" placeholder="Search by ID, name, supplier, or description..." oninput="filterProducts()">
+                            <input type="text" id="productSearchInput" class="search-input" placeholder="Search by ID, name, supplier, or description..." oninput="debouncedFilterProducts()">
                         </div>
                     </div>
                 </div>
@@ -494,7 +494,7 @@
                     </button>
                 </div>
                 <div class="search-bar">
-                    <input type="text" id="invoiceSearchInput" class="search-input" placeholder="Search by ID, invoice no, customer, date, or status..." oninput="filterInvoices()">
+                    <input type="text" id="invoiceSearchInput" class="search-input" placeholder="Search by ID, invoice no, customer, date, or status..." oninput="debouncedFilterInvoices()">
                 </div>
                 <div id="invoiceTableContainer"></div>
             </div>
@@ -684,7 +684,7 @@
                         id="quotationSearchInput"
                         type="text"
                         placeholder="Search by ID, quotation no, customer, item, or date..."
-                        oninput="filterQuotations()"
+                        oninput="debouncedFilterQuotations()"
                         class="search-input w-full"
                     />
                 </div>
@@ -714,6 +714,15 @@
                         <div class="form-group">
                             <label>Date</label>
                             <input type="date" id="quotationDate" onchange="updateQuotationPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Currency</label>
+                            <select id="quotationCurrencySelect" onchange="updateQuotationCurrency()" style="font-weight:600;">
+                                <option value="SAR">&#xFDFC; SAR — Saudi Riyal</option>
+                                <option value="BDT">৳ BDT — Bangladeshi Taka</option>
+                                <option value="USD">$ USD — US Dollar</option>
+                                <option value="EUR">€ EUR — Euro</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -1338,7 +1347,7 @@
                         <div class="acc-toolbar-right">
                             <div class="acc-search-wrap">
                                 <i class="fas fa-search acc-search-icon"></i>
-                                <input type="text" id="accountingSearchInput" class="acc-search-input" placeholder="Search entries…" oninput="renderAccounting()">
+                                <input type="text" id="accountingSearchInput" class="acc-search-input" placeholder="Search entries…" oninput="debouncedRenderAccounting()">
                             </div>
                             <button onclick="exportAccountingCSV()" class="btn-secondary acc-export-btn" title="Export CSV">
                                 <i class="fas fa-file-csv"></i> Export
@@ -2472,7 +2481,22 @@
                 </div>
                 <div class="form-group">
                     <label>Amount</label>
-                    <input type="number" id="expenseAmount" class="form-control" min="0" step="0.01" value="0">
+                    <input type="number" id="expenseAmount" class="form-control" min="0" step="0.01" value="0" oninput="updateExpensePreview()">
+                </div>
+                <div class="form-group">
+                    <label>Currency</label>
+                    <select id="expenseCurrency" class="form-control" onchange="updateExpensePreview()" style="font-weight:600;">
+                        <option value="SAR">&#xFDFC; SAR — Saudi Riyal</option>
+                        <option value="BDT">৳ BDT — Bangladeshi Taka</option>
+                        <option value="USD">$ USD — US Dollar</option>
+                        <option value="EUR">€ EUR — Euro</option>
+                    </select>
+                </div>
+                <div id="expenseConversionPreview" style="padding:10px;background:var(--bg-primary);border-radius:8px;margin:12px 0;font-size:12px;color:var(--text-secondary);display:none;">
+                    <div style="display:flex;justify-content:space-between;gap:10px;">
+                        <span id="expenseOriginalAmount"></span>
+                        <span id="expenseConvertedAmount" style="font-weight:600;color:var(--accent);"></span>
+                    </div>
                 </div>
                 <div style="margin:14px 0 8px;font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--border-color);padding-top:14px;">
                     <i class="fas fa-user-tag" style="margin-right:6px;"></i>Pay To <span style="font-weight:400;">(Optional)</span>

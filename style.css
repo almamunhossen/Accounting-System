@@ -3557,3 +3557,242 @@
             box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
         }
         /* ===== END ACTION DROPDOWN MENU ===== */
+/* =========================================
+   PRO UI & PERFORMANCE ENHANCEMENTS
+   ========================================= */
+
+/* 1. Smooth Modal Animations */
+@keyframes fadeScaleIn {
+    0% { opacity: 0; transform: scale(0.95) translateY(-10px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes fadeInBg {
+    0% { background: rgba(0,0,0,0); }
+    100% { background: rgba(0,0,0,0.5); }
+}
+
+.modal {
+    animation: fadeInBg 0.25s ease-out;
+}
+
+.modal-content {
+    animation: fadeScaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 2. Professional Focus Rings on Inputs */
+input[type="text"]:focus, 
+input[type="number"]:focus, 
+input[type="email"]:focus, 
+input[type="tel"]:focus, 
+input[type="password"]:focus, 
+input[type="date"]:focus, 
+textarea:focus, 
+select:focus {
+    outline: none !important;
+    border-color: #4a90e2 !important;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2) !important;
+    transition: all 0.2s ease;
+}
+
+/* 3. Global Table Hover States */
+.data-table tbody tr, 
+.acc-table tbody tr, 
+.report-table tbody tr,
+.customer-table tbody tr,
+.supplier-table tbody tr,
+.invoice-table tbody tr,
+.product-table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.data-table tbody tr:hover, 
+.acc-table tbody tr:hover, 
+.report-table tbody tr:hover,
+.customer-table tbody tr:hover,
+.supplier-table tbody tr:hover,
+.invoice-table tbody tr:hover,
+.product-table tbody tr:hover {
+    background-color: rgba(74, 144, 226, 0.05) !important;
+    cursor: default;
+}
+
+/* 4. Elegant Custom Scrollbars (Enhancing Existing) */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(150, 150, 150, 0.4); 
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(150, 150, 150, 0.6); 
+}
+
+/* 5. Smooth Tab Transitions */
+.view {
+    animation: fadeInTab 0.3s ease-in-out;
+}
+@keyframes fadeInTab {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== CURRENCY BADGE & CONVERSION STYLES ===== */
+
+/* Currency Badge — compact colored indicator */
+.currency-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.currency-badge-sar {
+    background: rgba(46, 204, 113, 0.1);
+    color: #2ecc71;
+}
+
+.currency-badge-bdt {
+    background: rgba(52, 152, 219, 0.1);
+    color: #3498db;
+}
+
+.currency-badge-usd {
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.currency-badge-eur {
+    background: rgba(243, 156, 18, 0.1);
+    color: #f39c12;
+}
+
+/* Conversion Preview Box */
+.conversion-preview {
+    padding: 10px;
+    background: var(--bg-primary);
+    border-radius: 8px;
+    margin: 12px 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.conversion-preview--visible {
+    display: block;
+}
+
+.conversion-preview--hidden {
+    display: none;
+}
+
+.conversion-preview-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.conversion-preview-row:last-child {
+    margin-bottom: 0;
+}
+
+.conversion-preview-label {
+    color: var(--text-secondary);
+}
+
+.conversion-preview-value {
+    font-weight: 600;
+    color: var(--accent);
+}
+
+/* Currency Amount Display — shows original + converted */
+.currency-amount {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.currency-amount-original {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.currency-amount-converted {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Invoice Header Currency Badge */
+.invoice-currency-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 16px;
+    background: #ecfdf5;
+    color: #166534;
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* Currency Info Section (for invoices) */
+.currency-info-section {
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.currency-info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 15px;
+    font-size: 11px;
+    background: #f9fafb;
+}
+
+.currency-info-label {
+    color: #666;
+}
+
+.currency-info-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Dark Mode Adjustments */
+body.dark-mode .conversion-preview {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+body.dark-mode .currency-info-row {
+    background: rgba(255,255,255,0.04);
+}
+
+body.dark-mode .currency-badge-sar {
+    background: rgba(46, 204, 113, 0.15);
+}
+
+body.dark-mode .currency-badge-bdt {
+    background: rgba(52, 152, 219, 0.15);
+}
+
+body.dark-mode .currency-badge-usd {
+    background: rgba(231, 76, 60, 0.15);
+}
+
+body.dark-mode .currency-badge-eur {
+    background: rgba(243, 156, 18, 0.15);
+}
+
+/* ===== END CURRENCY STYLES ===== */
+
