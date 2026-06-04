@@ -1095,13 +1095,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             try {
                 const rows = await window.APIClient.getData('getAccounting');
                 accountingEntries = rows.map(normalizeAccountingFromApi);
-            } catch (error) {
-                const msg = String(error?.message || '');
-                if (/Unknown action:\s*getAccounting/i.test(msg)) {
-                    accountingEntries = [];
-                    return;
-                }
-                throw error;
+                } catch (error) {
+                    const msg = String(error?.message || '');
+                    if (/Unknown action:\s*getAccounting/i.test(msg)) {
+                        accountingEntries = [];
+                        return;
+                    }
+                    console.error('Error syncing accounting data:', error);
+                    throw error;
             }
         }
 
@@ -1168,6 +1169,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     }
                 });
                 writeStoredJson('pro_invoice_settings', settings);
+                try { persistKeyImmediate(LS_SETTINGS_KEY, settings); } catch (e) {}
+                try { persistKeyImmediate(LS_SETTINGS_KEY, settings); } catch (e) {}
             } catch (error) {
                 console.warn('syncSettingsFromApi failed (using cached settings):', String(error?.message || error || ''));
             }
@@ -1591,8 +1594,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
         let _saveCacheTimer = null;
 
+        // Immediate persist helper for critical small writes (synchronous localStorage write)
+        function persistKeyImmediate(key, val) {
+            try {
+                localStorage.setItem(key, JSON.stringify(val));
+            } catch (e) {
+                // ignore quota/other errors
+            }
+        }
+
         function saveApiCache() {
-            // Debounce: merge rapid successive calls into one write (300 ms window)
+            // Debounce: merge rapid successive calls into one write (100 ms window)
             clearTimeout(_saveCacheTimer);
             _saveCacheTimer = setTimeout(function _doSaveCache() {
                 const trySet = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {} };
@@ -1616,7 +1628,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 } else {
                     doWrite();
                 }
-            }, 300);
+            }, 100);
         }
 
         function loadApiCache() {
@@ -1824,6 +1836,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 } else {
                     await window.APIClient.postData('addAccounting', { entry });
                     accountingEntries.push(entry);
+                    try { persistKeyImmediate(LS_EK.a, accountingEntries); } catch (e) {}
                 }
                 saveApiCache();
                 closeAccountingModal();
@@ -2164,6 +2177,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 } else {
                     await window.APIClient.postData('addExpense', { expense: entry });
                     expenses.push(entry);
+                    try { persistKeyImmediate(LS_EK.e, expenses); } catch (e) {}
                 }
                 saveApiCache();
                 closeExpenseModal();
@@ -2459,6 +2473,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         if (index !== -1) customers[index] = savedRecord;
                     } else {
                         customers.push(savedRecord);
+                        try { persistKeyImmediate(LS_EK.c, customers); } catch (e) {}
                     }
                     saveApiCache();
                 } catch (error) {
@@ -2471,6 +2486,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     customers[index] = { ...customers[index], ...customerData };
                 } else {
                     customers.push(customerData);
+                    try { persistKeyImmediate(LS_EK.c, customers); } catch (e) {}
                 }
                 saveData();
             }
@@ -3368,6 +3384,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         if (index !== -1) suppliers[index] = savedSupplier;
                     } else {
                         suppliers.push(savedSupplier);
+                        try { persistKeyImmediate(LS_EK.s, suppliers); } catch (e) {}
                     }
                     saveApiCache();
                 } catch (error) {
@@ -3380,6 +3397,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     if (index !== -1) suppliers[index] = supplierData;
                 } else {
                     suppliers.push(supplierData);
+                    try { persistKeyImmediate(LS_EK.s, suppliers); } catch (e) {}
                 }
                 saveData();
             }
@@ -3612,6 +3630,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         if (index !== -1) savedProducts[index] = productData;
                     } else {
                         savedProducts.push(productData);
+                        try { persistKeyImmediate(LS_EK.p, savedProducts); } catch (e) {}
                     }
                     window.APIClient?.showToast?.(currentProductId ? 'Product updated successfully' : 'Product added successfully', 'success');
                 } catch (error) {
@@ -4281,6 +4300,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const settings = readStoredJson('pro_invoice_settings', {});
             settings.vatTaxEnabled = Boolean(enabled);
             writeStoredJson('pro_invoice_settings', settings);
+            try { persistKeyImmediate(LS_SETTINGS_KEY, settings); } catch (e) {}
 
             const invoiceListVisible = document.getElementById('invoiceListView')?.style.display === 'block';
             const invoiceFormVisible = document.getElementById('invoiceFormView')?.style.display === 'block';
@@ -4609,9 +4629,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 const existingCustomer = customers.find(c => c.name === customerName);
                 if (existingCustomer) {
                     customerId = existingCustomer.id;
-                } else {
-                    customerId = Date.now().toString();
-                    customers.push({
+                    } else {
+                        customerId = Date.now().toString();
+                        customers.push({
                         id: customerId,
                         name: customerName,
                         phone: customerSnapshot.customerPhone,
@@ -4622,7 +4642,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         tag: 'New',
                         totalSpent: 0,
                         contactHistory: []
-                    });
+                        });
+                        try { persistKeyImmediate(LS_EK.c, customers); } catch (e) {}
                 }
             }
             
@@ -4722,6 +4743,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         invoices.push(invoice);
                     }
                     await refreshCustomerFinancials(customerId);
+                    // Persist invoices immediately to reduce perceived save latency
+                    try { persistKeyImmediate(LS_EK.i, invoices); } catch (e) {}
                 } catch (error) {
                     console.warn('Invoice API save failed:', error);
                     return;
@@ -5402,11 +5425,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                         }
                     });
                     quotations.push(quotation);
+                    try { persistKeyImmediate(LS_EK.q, quotations); } catch (e) {}
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*addQuotation/i.test(message)) {
                         // Deployed Apps Script is outdated — save locally and prompt user to redeploy
                         quotations.push(quotation);
+                        try { persistKeyImmediate(LS_EK.q, quotations); } catch (e) {}
                         saveData();
                         window.APIClient?.showToast?.('Quotation saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
@@ -5417,6 +5442,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 }
             } else {
                 quotations.push(quotation);
+                try { persistKeyImmediate(LS_EK.q, quotations); } catch (e) {}
                 saveData();
             }
 
@@ -5668,7 +5694,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var todayInvoices = invoices.filter(function(inv) { return isDateWithinRange(inv.date, todayRange); });
             var todayExpenses = expenses.filter(function(exp) { return isDateWithinRange(exp.date, todayRange); });
             var todaySales = todayInvoices.reduce(function(s,inv) { return s + convertCurrency(Number(inv.total||0), inv.currency||'SAR'); }, 0);
-            var todayExpTotal = todayExpenses.reduce(function(s,e) { return s + convertCurrency(Number(e.amount||0)); }, 0);
+            var todayExpTotal = todayExpenses.reduce(function(s,e) { return s + convertCurrency(Number(e.amount||0), e.currency || 'SAR'); }, 0);
             var todayProfit = todaySales - todayExpTotal;
 
             var label = document.getElementById('dailyReportDateLabel');
@@ -5676,9 +5702,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             var kpiGrid = document.getElementById('dailyKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Today\'s Sales',    formatCurrency(convertCurrency(todaySales)),    'fas fa-dollar-sign',       ''],
-                ['Today\'s Expenses', formatCurrency(convertCurrency(todayExpTotal)), 'fas fa-receipt',           ''],
-                ['Net Profit',        formatCurrency(convertCurrency(todayProfit)),   'fas fa-sack-dollar',        todayProfit >= 0 ? 'color:var(--success-color,#28a745)' : 'color:#dc3545'],
+                ['Today\'s Sales',    formatCurrency(todaySales),    'fas fa-dollar-sign',       ''],
+                ['Today\'s Expenses', formatCurrency(todayExpTotal), 'fas fa-receipt',           ''],
+                ['Net Profit',        formatCurrency(todayProfit),   'fas fa-sack-dollar',        todayProfit >= 0 ? 'color:var(--success-color,#28a745)' : 'color:#dc3545'],
                 ['Invoices Today',    todayInvoices.length,          'fas fa-file-invoice-dollar','']
             ].map(function(k) {
                 return '<div class="report-kpi-card"><span>' + k[0] + '</span><strong style="' + k[3] + '">' + k[1] + '</strong><small>' + k[2].replace('fas ','') + '</small></div>';
@@ -5708,7 +5734,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     expBody.innerHTML = todayExpenses.map(function(exp) {
                         return '<tr><td>' + escapeHtml(exp.category||'General') + '</td>' +
                                '<td>' + escapeHtml(exp.description||exp.notes||'-') + '</td>' +
-                               '<td>' + formatCurrency(convertCurrency(Number(exp.amount||0))) + '</td></tr>';
+                               '<td>' + formatCurrency(convertCurrency(Number(exp.amount||0), exp.currency || 'SAR')) + '</td></tr>';
                     }).join('');
                 }
             }
@@ -5744,7 +5770,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 var mInvoices = invoices.filter(function(inv){ return isDateWithinRange(inv.date, range); });
                 var mExpenses = expenses.filter(function(exp){ return isDateWithinRange(exp.date, range); });
                 var sales = mInvoices.reduce(function(s,inv){ return s+convertCurrency(Number(inv.total||0),inv.currency||'SAR'); }, 0);
-                var exp   = mExpenses.reduce(function(s,e){ return s+convertCurrency(Number(e.amount||0)); }, 0);
+                var exp   = mExpenses.reduce(function(s,e){ return s+convertCurrency(Number(e.amount||0), e.currency || 'SAR'); }, 0);
                 var profit = sales - exp;
                 var margin = sales > 0 ? ((profit/sales)*100).toFixed(1) : '0.0';
                 totalSales += sales; totalExp += exp; totalInv += mInvoices.length;
@@ -5755,9 +5781,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var totalProfit = totalSales - totalExp;
             var kpiGrid = document.getElementById('monthlyKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Total Sales ' + year,    formatCurrency(convertCurrency(totalSales)),   ''],
-                ['Total Expenses ' + year, formatCurrency(convertCurrency(totalExp)),     ''],
-                ['Net Profit ' + year,     formatCurrency(convertCurrency(totalProfit)),  totalProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
+                ['Total Sales ' + year,    formatCurrency(totalSales),   ''],
+                ['Total Expenses ' + year, formatCurrency(totalExp),     ''],
+                ['Net Profit ' + year,     formatCurrency(totalProfit),  totalProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
                 ['Total Invoices ' + year, totalInv,                     '']
             ].map(function(k){
                 return '<div class="report-kpi-card"><span>'+k[0]+'</span><strong style="'+k[2]+'">'+k[1]+'</strong></div>';
@@ -5786,17 +5812,17 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             if (tbody) {
                 tbody.innerHTML = months.map(function(m) {
                     var profitColor = m.profit >= 0 ? '#28a745' : '#dc3545';
-                    return '<tr><td>' + m.label + '</td><td>' + formatCurrency(convertCurrency(m.sales)) + '</td>' +
-                           '<td>' + formatCurrency(convertCurrency(m.exp)) + '</td>' +
-                           '<td style="color:'+profitColor+';font-weight:600">' + formatCurrency(convertCurrency(m.profit)) + '</td>' +
+                          return '<tr><td>' + m.label + '</td><td>' + formatCurrency(m.sales) + '</td>' +
+                              '<td>' + formatCurrency(m.exp) + '</td>' +
+                              '<td style="color:'+profitColor+';font-weight:600">' + formatCurrency(m.profit) + '</td>' +
                            '<td>' + m.invoices + '</td><td>' + m.margin + '%</td></tr>';
                 }).join('');
             }
             var tfoot = document.getElementById('monthlyReportTableFoot');
             var totMargin = totalSales>0 ? ((totalProfit/totalSales)*100).toFixed(1):'0.0';
             if (tfoot) tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-primary)">' +
-                '<td>Total</td><td>' + formatCurrency(convertCurrency(totalSales)) + '</td><td>' + formatCurrency(convertCurrency(totalExp)) + '</td>' +
-                '<td style="color:' + (totalProfit>=0?'#28a745':'#dc3545') + '">' + formatCurrency(convertCurrency(totalProfit)) + '</td>' +
+                '<td>Total</td><td>' + formatCurrency(totalSales) + '</td><td>' + formatCurrency(totalExp) + '</td>' +
+                '<td style="color:' + (totalProfit>=0?'#28a745':'#dc3545') + '">' + formatCurrency(totalProfit) + '</td>' +
                 '<td>' + totalInv + '</td><td>' + totMargin + '%</td></tr>';
         }
 
@@ -5813,9 +5839,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             var kpiGrid = document.getElementById('profitKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Total Revenue',   formatCurrency(convertCurrency(totalRev)),   ''],
-                ['Total Expenses',  formatCurrency(convertCurrency(totalExp)),   ''],
-                ['Net Profit',      formatCurrency(convertCurrency(netProfit)),  netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
+                ['Total Revenue',   formatCurrency(totalRev),   ''],
+                ['Total Expenses',  formatCurrency(totalExp),   ''],
+                ['Net Profit',      formatCurrency(netProfit),  netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545'],
                 ['Profit Margin',   margin + '%',               netProfit>=0?'color:var(--success-color,#28a745)':'color:#dc3545']
             ].map(function(k){
                 return '<div class="report-kpi-card"><span>'+k[0]+'</span><strong style="'+k[2]+'">'+k[1]+'</strong></div>';
@@ -5850,8 +5876,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     tbody.innerHTML = rows.map(function(r) {
                         var m = r.revenue > 0 ? ((r.profit/r.revenue)*100).toFixed(1) : '0.0';
                         var c = r.profit >= 0 ? '#28a745' : '#dc3545';
-                        return '<tr><td>' + escapeHtml(r.name) + '</td><td>' + formatCurrency(convertCurrency(r.revenue)) + '</td>' +
-                               '<td style="color:'+c+';font-weight:600">' + formatCurrency(convertCurrency(r.profit)) + '</td>' +
+                           return '<tr><td>' + escapeHtml(r.name) + '</td><td>' + formatCurrency(r.revenue) + '</td>' +
+                               '<td style="color:'+c+';font-weight:600">' + formatCurrency(r.profit) + '</td>' +
                                '<td style="color:'+c+'">' + m + '%</td></tr>';
                     }).join('');
                 }
@@ -5871,8 +5897,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             var kpiGrid = document.getElementById('expenseKpiGrid');
             if (kpiGrid) kpiGrid.innerHTML = [
-                ['Total Expenses',    formatCurrency(convertCurrency(totalExp)),       ''],
-                ['Daily Average',     formatCurrency(convertCurrency(avgPerDay)),      ''],
+                ['Total Expenses',    formatCurrency(totalExp),       ''],
+                ['Daily Average',     formatCurrency(avgPerDay),      ''],
                 ['Top Category',      escapeHtml(topCat),             ''],
                 ['Expense Count',     stats.filteredExpenses.length,  '']
             ].map(function(k){
@@ -5930,7 +5956,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 } else {
                     catBody.innerHTML = catRows.map(function(r) {
                         var pct = totalExp > 0 ? ((r.amount/totalExp)*100).toFixed(1) : '0.0';
-                        return '<tr><td>' + escapeHtml(r.category) + '</td><td>' + formatCurrency(convertCurrency(r.amount)) + '</td><td>' + pct + '%</td></tr>';
+                        return '<tr><td>' + escapeHtml(r.category) + '</td><td>' + formatCurrency(r.amount) + '</td><td>' + pct + '%</td></tr>';
                     }).join('');
                 }
             }
@@ -5947,7 +5973,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var netProfit = revenue - totalExpenses;
 
             function plRow(label, val, cls, indent) {
-                var formatted = typeof val === 'number' ? formatCurrency(convertCurrency(Math.abs(val))) : val;
+                var formatted = typeof val === 'number' ? formatCurrency(Math.abs(val)) : val;
                 var sign = (typeof val === 'number' && val < 0) ? '-' : '';
                 return '<div class="pl-row' + (cls?' '+cls:'') + (indent?' indent':'') + '">' +
                        '<span>' + label + '</span><span>' + sign + formatted + '</span></div>';
@@ -5971,9 +5997,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             var netCls = netProfit >= 0 ? 'profit' : 'loss';
             html += '<div class="pl-section-title">' + (netProfit >= 0 ? 'Net Profit' : 'Net Loss') + '</div>';
-            html += '<div class="pl-row total">' +
+                html += '<div class="pl-row total">' +
                     '<span>' + (netProfit >= 0 ? 'Net Profit' : 'Net Loss') + '</span>' +
-                    '<span>' + formatCurrency(convertCurrency(Math.abs(netProfit))) + '</span></div>';
+                    '<span>' + formatCurrency(Math.abs(netProfit)) + '</span></div>';
 
             var container = document.getElementById('plStatement');
             if (container) container.innerHTML = html;
@@ -6002,7 +6028,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var totalAssets = cashReceived + receivables + inventoryValue;
 
             // === LIABILITIES ===
-            var supplierPayables = suppliers.reduce(function(s,sup){ return s + convertCurrency(Number(sup.dueAmount||0)); }, 0);
+            var supplierPayables = suppliers.reduce(function(s,sup){ return s + convertCurrency(Number(sup.dueAmount||0), sup.currency || 'SAR'); }, 0);
             var totalLiabilities = supplierPayables;
 
             // === EQUITY ===
@@ -6011,9 +6037,9 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             function bsSection(title, rows, totalLabel, totalVal, totalColor) {
                 var html = '<div class="pl-section-title">' + title + '</div>';
                 rows.forEach(function(r){
-                    html += '<div class="pl-row indent"><span>' + r[0] + '</span><span>' + formatCurrency(convertCurrency(r[1])) + '</span></div>';
+                    html += '<div class="pl-row indent"><span>' + r[0] + '</span><span>' + formatCurrency(r[1]) + '</span></div>';
                 });
-                html += '<div class="pl-row subtotal"><span>' + totalLabel + '</span><span>' + formatCurrency(convertCurrency(totalVal)) + '</span></div>';
+                html += '<div class="pl-row subtotal"><span>' + totalLabel + '</span><span>' + formatCurrency(totalVal) + '</span></div>';
                 return html;
             }
 
@@ -6023,7 +6049,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                  ['Accounts Receivable', receivables],
                  ['Inventory Value', inventoryValue]],
                 'Total Assets', totalAssets, '#28a745');
-            assetsHtml += '<div class="pl-row total"><span>Total Assets</span><span>' + formatCurrency(convertCurrency(totalAssets)) + '</span></div>';
+            assetsHtml += '<div class="pl-row total"><span>Total Assets</span><span>' + formatCurrency(totalAssets) + '</span></div>';
 
             var liabEqHtml = '<h3 style="font-size:16px;font-weight:700;margin-bottom:12px;color:#dc3545"><i class="fas fa-file-invoice-dollar"></i> Liabilities &amp; Equity</h3>';
             liabEqHtml += bsSection('Liabilities',
@@ -6032,7 +6058,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             liabEqHtml += bsSection('Equity',
                 [['Net Assets (Owner\'s Equity)', equity]],
                 'Total Equity', equity, equity>=0?'#28a745':'#dc3545');
-            liabEqHtml += '<div class="pl-row total"><span>Liabilities + Equity</span><span>' + formatCurrency(convertCurrency(totalLiabilities + equity)) + '</span></div>';
+            liabEqHtml += '<div class="pl-row total"><span>Liabilities + Equity</span><span>' + formatCurrency(totalLiabilities + equity) + '</span></div>';
 
             var assetsEl = document.getElementById('bsAssets');
             var liabEl = document.getElementById('bsLiabilitiesEquity');
@@ -6044,7 +6070,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             var checkEl = document.getElementById('bsBalanceCheck');
             if (checkEl) {
                 checkEl.innerHTML = diff < 0.01
-                    ? '<i class="fas fa-check-circle" style="color:#28a745;font-size:24px;"></i><p style="color:#28a745;font-weight:700;margin-top:8px;">Balance Sheet is Balanced ✓</p><small style="color:var(--text-secondary)">Total Assets = Total Liabilities + Equity (' + formatCurrency(convertCurrency(totalAssets)) + ')</small>'
+                    ? '<i class="fas fa-check-circle" style="color:#28a745;font-size:24px;"></i><p style="color:#28a745;font-weight:700;margin-top:8px;">Balance Sheet is Balanced ✓</p><small style="color:var(--text-secondary)">Total Assets = Total Liabilities + Equity (' + formatCurrency(totalAssets) + ')</small>'
                     : '<i class="fas fa-exclamation-circle" style="color:#ffc107;font-size:24px;"></i><p style="color:#ffc107;font-weight:600;margin-top:8px;">Note: Simplified view — some items may not be tracked in the system</p>';
             }
         }
@@ -6066,7 +6092,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const filteredLeaves = hrLeaves.filter(row => rangesOverlap(row.fromDate, row.toDate, range.start, range.end));
 
             const totalSales = filteredInvoices.reduce((sum, invoice) => sum + convertCurrency(Number(invoice.total || 0), invoice.currency || 'SAR'), 0);
-            const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + convertCurrency(Number(expense.amount || 0)), 0);
+            const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + convertCurrency(Number(expense.amount || 0), expense.currency || 'SAR'), 0);
             const netProfit = totalSales - totalExpenses;
 
             const invoiceStatuses = filteredInvoices.reduce((acc, invoice) => {
@@ -6077,7 +6103,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
 
             const averageInvoiceValue = filteredInvoices.length ? totalSales / filteredInvoices.length : 0;
             const salesTrend = buildTimeSeries(filteredInvoices, range, invoice => invoice.date, invoice => convertCurrency(Number(invoice.total || 0), invoice.currency || 'SAR'));
-            const expenseTrend = buildTimeSeries(filteredExpenses, range, expense => expense.date, expense => convertCurrency(Number(expense.amount || 0)));
+            const expenseTrend = buildTimeSeries(filteredExpenses, range, expense => expense.date, expense => convertCurrency(Number(expense.amount || 0), expense.currency || 'SAR'));
             const profitTrend = {
                 labels: salesTrend.labels,
                 revenue: salesTrend.values,
@@ -6391,6 +6417,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     const key = normalizeReportKey(name);
                     const amounts = calculateLineAmounts(item);
                     const cost = Number(productLookup[key]?.cost || 0) * amounts.quantity;
+                    const revenueConverted = convertCurrency(amounts.total, invoice.currency || 'SAR');
+                    const costConverted = convertCurrency(cost, productLookup[key]?.currency || 'SAR');
 
                     if (!metrics[key]) {
                         metrics[key] = {
@@ -6402,8 +6430,8 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                     }
 
                     metrics[key].quantity += amounts.quantity;
-                    metrics[key].revenue += amounts.total;
-                    metrics[key].profit += amounts.total - cost;
+                    metrics[key].revenue += revenueConverted;
+                    metrics[key].profit += revenueConverted - costConverted;
                 });
             });
 
@@ -6424,15 +6452,15 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const categories = {};
             filteredExpenses.forEach(expense => {
                 const category = expense.category || 'General';
-                categories[category] = (categories[category] || 0) + convertCurrency(Number(expense.amount || 0));
+                categories[category] = (categories[category] || 0) + convertCurrency(Number(expense.amount || 0), expense.currency || 'SAR');
             });
 
             return {
                 rows: Object.entries(categories)
                     .map(([category, amount]) => ({ category, amount }))
                     .sort((a, b) => b.amount - a.amount),
-                trend: buildTimeSeries(filteredExpenses, range, expense => expense.date, expense => convertCurrency(Number(expense.amount || 0))),
-                monthlyTrend: buildMonthlySeries(filteredExpenses, range, expense => expense.date, expense => convertCurrency(Number(expense.amount || 0)))
+                trend: buildTimeSeries(filteredExpenses, range, expense => expense.date, expense => convertCurrency(Number(expense.amount || 0), expense.currency || 'SAR')),
+                monthlyTrend: buildMonthlySeries(filteredExpenses, range, expense => expense.date, expense => convertCurrency(Number(expense.amount || 0), expense.currency || 'SAR'))
             };
         }
 
@@ -6598,13 +6626,13 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         function renderReportOverview(stats) {
-            setReportValue('reportTotalSales', formatCurrency(convertCurrency(stats.totalSales)));
-            setReportValue('reportTotalExpenses', formatCurrency(convertCurrency(stats.totalExpenses)));
-            setReportValue('reportNetProfit', formatCurrency(convertCurrency(stats.netProfit)));
+            setReportValue('reportTotalSales', formatCurrency(stats.totalSales));
+            setReportValue('reportTotalExpenses', formatCurrency(stats.totalExpenses));
+            setReportValue('reportNetProfit', formatCurrency(stats.netProfit));
             setReportValue('reportTotalInvoices', String(stats.totalInvoices));
-            setReportValue('reportDailySales', formatCurrency(convertCurrency(stats.dailySales)));
-            setReportValue('reportMonthlySales', formatCurrency(convertCurrency(stats.monthlySales)));
-            setReportValue('reportYearlySales', formatCurrency(convertCurrency(stats.yearlySales)));
+            setReportValue('reportDailySales', formatCurrency(stats.dailySales));
+            setReportValue('reportMonthlySales', formatCurrency(stats.monthlySales));
+            setReportValue('reportYearlySales', formatCurrency(stats.yearlySales));
             setReportValue('reportSalesGrowth', `${stats.growth.percent >= 0 ? '+' : ''}${stats.growth.percent.toFixed(1)}%`);
             setReportValue('reportSalesGrowthMeta', stats.growth.label);
             setReportValue('reportActiveRangeLabel', stats.rangeLabel);
@@ -6620,7 +6648,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         function renderReportTables(stats) {
             renderReportList('reportExpenseBreakdownList', stats.expenseStats.rows.slice(0, 6), row => ({
                 title: row.category,
-                value: formatCurrency(convertCurrency(row.amount)),
+                value: formatCurrency(row.amount),
                 meta: 'Expense category total'
             }), 'No expense records found.');
 
@@ -6628,7 +6656,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 { title: 'Total Employees', value: String(stats.hrStats.totalEmployees), meta: 'Active employees in HR database' },
                 { title: 'Attendance Summary', value: `${stats.hrStats.attendance.present} Present / ${stats.hrStats.attendance.late} Late / ${stats.hrStats.attendance.absent} Absent`, meta: 'Selected period attendance' },
                 { title: 'Leave Requests', value: String(stats.hrStats.totalLeaves), meta: stats.hrStats.leaveByType.map(item => `${item.type}: ${item.count}`).join(' | ') || 'No leave records' },
-                { title: 'Monthly Salary Expense', value: formatCurrency(convertCurrency(stats.hrStats.salaryExpense)), meta: 'Current payroll baseline' },
+                { title: 'Monthly Salary Expense', value: formatCurrency(stats.hrStats.salaryExpense), meta: 'Current payroll baseline' },
                 { title: 'Overtime Hours', value: `${stats.hrStats.totalOvertimeHours.toFixed(2)} h`, meta: 'Total overtime in selected period' }
             ], row => row, 'No HR data available.');
 
@@ -6648,18 +6676,18 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
                 { title: 'Paid Invoices', value: String(stats.paidInvoices), meta: 'Settled invoices in selected range' },
                 { title: 'Pending Invoices', value: String(stats.pendingInvoices), meta: 'Awaiting payment' },
                 { title: 'Overdue Invoices', value: String(stats.overdueInvoices), meta: 'Past due date and unpaid' },
-                { title: 'Average Invoice Value', value: formatCurrency(convertCurrency(stats.averageInvoiceValue)), meta: 'Average billing size' }
+                { title: 'Average Invoice Value', value: formatCurrency(stats.averageInvoiceValue), meta: 'Average billing size' }
             ], row => row, 'No invoice data available.');
 
             renderReportList('reportVatSummaryList', [
-                { title: 'Total VAT Collected', value: formatCurrency(convertCurrency(stats.vatStats.totalVat)), meta: 'VAT from selected invoices' },
-                { title: 'Average VAT Per Invoice', value: formatCurrency(convertCurrency(stats.vatStats.averageVat)), meta: 'Average VAT loading' },
-                ...stats.vatStats.rows.slice(0, 3).map(row => ({ title: row.invoiceNo, value: formatCurrency(convertCurrency(row.vat)), meta: row.customerName }))
+                { title: 'Total VAT Collected', value: formatCurrency(stats.vatStats.totalVat), meta: 'VAT from selected invoices' },
+                { title: 'Average VAT Per Invoice', value: formatCurrency(stats.vatStats.averageVat), meta: 'Average VAT loading' },
+                ...stats.vatStats.rows.slice(0, 3).map(row => ({ title: row.invoiceNo, value: formatCurrency(row.vat), meta: row.customerName }))
             ], row => row, 'No VAT records found.');
 
             renderReportList('reportVatMonthlySummaryList', stats.vatStats.monthlyRows, row => ({
                 title: row.month,
-                value: formatCurrency(convertCurrency(row.vat)),
+                value: formatCurrency(row.vat),
                 meta: 'Monthly VAT'
             }), 'No monthly VAT summary available.');
 
@@ -7094,8 +7122,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 <h1>Tax / VAT Report (Saudi)</h1>
 <div class="meta">Range: ${rangeLabel} | Useful for ZATCA reporting</div>
 <div class="kpi-wrap">
-  <div class="card"><div>Total VAT Collected</div><div class="kpi">${formatCurrency(convertCurrency(stats.vatStats.totalVat))}</div></div>
-  <div class="card"><div>Average VAT Per Invoice</div><div class="kpi">${formatCurrency(convertCurrency(stats.vatStats.averageVat))}</div></div>
+    <div class="card"><div>Total VAT Collected</div><div class="kpi">${formatCurrency(stats.vatStats.totalVat)}</div></div>
+    <div class="card"><div>Average VAT Per Invoice</div><div class="kpi">${formatCurrency(stats.vatStats.averageVat)}</div></div>
 </div>
 <div class="card"><h3>VAT Trend</h3>${vatImg ? `<img class="chart" src="${vatImg}" alt="VAT trend chart">` : '<p>No chart</p>'}</div>
 <div class="card" style="margin-top:12px;"><h3>VAT Per Invoice</h3><table><thead><tr><th>Invoice</th><th>Customer</th><th>VAT</th></tr></thead><tbody>${invoiceRows}</tbody></table></div>
@@ -7143,7 +7171,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
 <div class="grid">
     <div class="card"><div>Total Employees</div><div class="kpi">${stats.hrStats.totalEmployees}</div></div>
-    <div class="card"><div>Monthly Salary Expense</div><div class="kpi">${formatCurrency(convertCurrency(stats.hrStats.salaryExpense))}</div></div>
+    <div class="card"><div>Monthly Salary Expense</div><div class="kpi">${formatCurrency(stats.hrStats.salaryExpense)}</div></div>
     <div class="card"><div>Attendance (P/L/A)</div><div class="kpi">${stats.hrStats.attendance.present} / ${stats.hrStats.attendance.late} / ${stats.hrStats.attendance.absent}</div></div>
     <div class="card"><div>Total Overtime</div><div class="kpi">${stats.hrStats.totalOvertimeHours.toFixed(2)} h</div></div>
 </div>
@@ -7373,6 +7401,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const settings = readStoredJson('pro_invoice_settings', {});
             settings.companyLogo = url;
             writeStoredJson('pro_invoice_settings', settings);
+            try { persistKeyImmediate(LS_SETTINGS_KEY, settings); } catch (e) {}
             applySidebarBranding();
             window.APIClient?.showToast?.('Drive logo applied! Click Save Settings to persist all changes.', 'success');
             input.value = '';
@@ -7765,6 +7794,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
 
             // 1. Save locally first so the UI is always up-to-date
             writeStoredJson('pro_invoice_settings', settings);
+            try { persistKeyImmediate(LS_SETTINGS_KEY, settings); } catch (e) {}
             try { localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); } catch(ex) {}
             if (settings.companyLogo) {
                 try { localStorage.setItem(LS_LOGO_KEY, settings.companyLogo); } catch(ex) {}
@@ -7780,6 +7810,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
             const eurVal = parseFloat(document.getElementById('exchangeRateEUR')?.value);
             if (eurVal > 0) { exchangeRates.EUR = eurVal; settings.exchangeRateEUR = eurVal; }
             writeStoredJson('pro_invoice_settings', settings);
+            try { persistKeyImmediate(LS_SETTINGS_KEY, settings); } catch (e) {}
             try { localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings)); } catch(ex) {}
 
             const savedLogo = settings.companyLogo;
@@ -8504,6 +8535,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         if (idx !== -1) hrEmployees[idx] = employee;
                     } else {
                         hrEmployees.push(employee);
+                        try { persistKeyImmediate(LS_EK.hEmp, hrEmployees); } catch (e) {}
                     }
                     window.APIClient?.showToast?.(window.currentEmployeeId ? 'Employee updated successfully' : 'Employee added successfully', 'success');
                 } catch (error) {
@@ -8515,6 +8547,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                             if (idx !== -1) hrEmployees[idx] = employee;
                         } else {
                             hrEmployees.push(employee);
+                            try { persistKeyImmediate(LS_EK.hEmp, hrEmployees); } catch (e) {}
                         }
                         saveData();
                         window.APIClient?.showToast?.('Employee saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
@@ -8529,7 +8562,8 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     const idx = hrEmployees.findIndex(e => e.id === window.currentEmployeeId);
                     if (idx !== -1) hrEmployees[idx] = employee;
                 } else {
-                    hrEmployees.push(employee);
+                        hrEmployees.push(employee);
+                        try { persistKeyImmediate(LS_EK.hEmp, hrEmployees); } catch (e) {}
                 }
                 saveData();
             }
@@ -8766,14 +8800,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     // Optimistic update
                     const existingAtt = hrAttendance.find(a => a.id === record.id);
                     if (existingAtt) { existingAtt.employeeId = record.employeeId; existingAtt.date = record.date; existingAtt.status = record.status; }
-                    else hrAttendance.push(record);
+                    else {
+                        hrAttendance.push(record);
+                        try { persistKeyImmediate(LS_EK.hAtt, hrAttendance); } catch (e) {}
+                    }
                     window.APIClient?.showToast?.('Attendance saved successfully', 'success');
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*(addAttendance|updateAttendance)/i.test(message)) {
                         const existingAtt = hrAttendance.find(a => a.id === record.id);
                         if (existingAtt) { existingAtt.employeeId = record.employeeId; existingAtt.date = record.date; existingAtt.status = record.status; }
-                        else hrAttendance.push(record);
+                        else {
+                            hrAttendance.push(record);
+                            try { persistKeyImmediate(LS_EK.hAtt, hrAttendance); } catch (e) {}
+                        }
                         saveData();
                         window.APIClient?.showToast?.('Attendance saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
@@ -8790,6 +8830,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     existing.status = record.status;
                 } else {
                     hrAttendance.push(record);
+                    try { persistKeyImmediate(LS_EK.hAtt, hrAttendance); } catch (e) {}
                 }
                 saveData();
             }
@@ -8912,14 +8953,20 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     // Optimistic update
                     const existingLeave = hrLeaves.find(l => l.id === leave.id);
                     if (existingLeave) { Object.assign(existingLeave, leave); }
-                    else hrLeaves.push(leave);
+                    else {
+                        hrLeaves.push(leave);
+                        try { persistKeyImmediate(LS_EK.hLv, hrLeaves); } catch (e) {}
+                    }
                     window.APIClient?.showToast?.('Leave saved successfully', 'success');
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*(addLeave|updateLeave)/i.test(message)) {
                         const existingLeave = hrLeaves.find(l => l.id === leave.id);
                         if (existingLeave) { Object.assign(existingLeave, leave); }
-                        else hrLeaves.push(leave);
+                        else {
+                            hrLeaves.push(leave);
+                            try { persistKeyImmediate(LS_EK.hLv, hrLeaves); } catch (e) {}
+                        }
                         saveData();
                         window.APIClient?.showToast?.('Leave saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
@@ -8938,6 +8985,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     existing.status = leave.status;
                 } else {
                     hrLeaves.push(leave);
+                    try { persistKeyImmediate(LS_EK.hLv, hrLeaves); } catch (e) {}
                 }
                 saveData();
             }
@@ -9058,11 +9106,13 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                     });
                     // Optimistic update
                     hrTasks.push(task);
+                    try { persistKeyImmediate(LS_EK.hTsk, hrTasks); } catch (e) {}
                     window.APIClient?.showToast?.('Task added successfully', 'success');
                 } catch (error) {
                     const message = String(error?.message || error || '');
                     if (/Unknown action:\s*addTask/i.test(message)) {
                         hrTasks.push(task);
+                        try { persistKeyImmediate(LS_EK.hTsk, hrTasks); } catch (e) {}
                         saveData();
                         window.APIClient?.showToast?.('Task saved locally. Please redeploy your Apps Script to sync to Google Sheets.', 'error');
                     } else {
@@ -9073,6 +9123,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                 }
             } else {
                 hrTasks.push(task);
+                try { persistKeyImmediate(LS_EK.hTsk, hrTasks); } catch (e) {}
                 saveData();
             }
 
@@ -9389,6 +9440,7 @@ img.chart{max-width:100%;border:1px solid #e5e7eb;border-radius:8px;margin-top:8
                         }
                     });
                     savedProducts.push(newProduct);
+                    try { persistKeyImmediate(LS_EK.p, savedProducts); } catch (e) {}
                     updateSavedProductsDatalist();
                     renderProducts();
                     refreshSupplierCardsIfVisible();
