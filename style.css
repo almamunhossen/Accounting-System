@@ -404,9 +404,19 @@
             padding-bottom: 0.9rem;
         }
 
+        .py-3 {
+            padding-top: 1.25rem;
+            padding-bottom: 1.25rem;
+        }
+
         .px-3 {
             padding-left: 1rem;
             padding-right: 1rem;
+        }
+
+        .px-4 {
+            padding-left: 1.5rem;
+            padding-right: 1.5rem;
         }
 
         .acc-toolbar-right {
@@ -1683,6 +1693,22 @@
         /* ===== INVOICE ITEMS TABLE — CSS-variable-aware classes ===== */
         .invoice-items-table-wrapper {
             background: var(--bg-primary);
+            overflow-x: auto;
+        }
+
+        .invoice-items-table-wrapper table {
+            min-width: 860px;
+        }
+
+        .invoice-items-table-wrapper th,
+        .invoice-items-table-wrapper td {
+            white-space: nowrap;
+        }
+
+        .invoice-items-table-wrapper .invoice-item-input {
+            width: 100%;
+            min-width: 8rem;
+            box-sizing: border-box;
         }
 
         .invoice-items-thead {
