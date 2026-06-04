@@ -3068,6 +3068,20 @@
                 min-width: 0;
             }
 
+            #quotationItemsInputContainer {
+                overflow-x: auto;
+            }
+
+            .item-row-header,
+            .quotation-item-row {
+                min-width: 860px;
+            }
+
+            .quotation-item-row input,
+            .quotation-item-row .btn-icon {
+                min-width: 0;
+            }
+
             .logo {
                 padding: 15px 10px;
             }
