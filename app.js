@@ -2188,30 +2188,36 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
         }
 
         // ==================== DASHBOARD ====================
-        function updateDashboard() {            document.getElementById('totalCustomers').innerText = customers.length;
+        function updateDashboard() {
+            document.getElementById('totalCustomers').innerText = customers.length;
             document.getElementById('totalInvoices').innerText = invoices.length;
-            const totalRevenue = invoices.reduce((sum, inv) => sum + convertCurrency(inv.total), 0);
-            document.getElementById('totalRevenue').innerHTML = formatCurrency(convertCurrency(totalRevenue));
-            
+
+            // Sum invoices converting each using its stored currency to the current display currency
+            const totalRevenue = invoices.reduce((sum, inv) => sum + convertCurrency(Number(inv.total || 0), inv.currency || 'SAR'), 0);
+            document.getElementById('totalRevenue').innerHTML = formatCurrency(totalRevenue);
+
             const currentMonth = new Date().getMonth();
-            const monthRevenue = invoices.filter(inv => new Date(inv.date).getMonth() === currentMonth)
-                .reduce((sum, inv) => sum + convertCurrency(inv.total), 0);
-            document.getElementById('monthRevenue').innerHTML = formatCurrency(convertCurrency(monthRevenue));
-            
+            const monthRevenue = invoices
+                .filter(inv => new Date(inv.date).getMonth() === currentMonth)
+                .reduce((sum, inv) => sum + convertCurrency(Number(inv.total || 0), inv.currency || 'SAR'), 0);
+            document.getElementById('monthRevenue').innerHTML = formatCurrency(monthRevenue);
+
             updateTopCustomers();
         }
 
         function updateTopCustomers() {
             const customerSales = {};
+            // Accumulate values already converted to `currentCurrency`
             invoices.forEach(inv => {
-                customerSales[inv.customerId] = (customerSales[inv.customerId] || 0) + convertCurrency(inv.total);
+                const val = convertCurrency(Number(inv.total || 0), inv.currency || 'SAR');
+                customerSales[inv.customerId] = (customerSales[inv.customerId] || 0) + val;
             });
             const topCustomers = Object.entries(customerSales)
                 .sort((a,b) => b[1] - a[1])
                 .slice(0,5)
                 .map(([id, total]) => {
                     const customer = customers.find(c => c.id === id);
-                    return `<div class="order-item"><span>${customer?.name || 'Unknown'}</span><span>${formatCurrency(convertCurrency(total))}</span></div>`;
+                    return `<div class="order-item"><span>${customer?.name || 'Unknown'}</span><span>${formatCurrency(total)}</span></div>`;
                 }).join('');
             document.getElementById('topCustomersList').innerHTML = topCustomers || '<p>No data</p>';
         }
@@ -2241,7 +2247,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const monthlyData = Array(12).fill(0);
             invoices.forEach(inv => {
                 const d = new Date(inv.date);
-                if (d.getFullYear() === currentYear) monthlyData[d.getMonth()] += convertCurrency(inv.total);
+                if (d.getFullYear() === currentYear) monthlyData[d.getMonth()] += convertCurrency(Number(inv.total || 0), inv.currency || 'SAR');
             });
             if (revenueChart) revenueChart.data.datasets[0].data = monthlyData;
             if (revenueChart) revenueChart.update();
@@ -4720,7 +4726,7 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 24px; ba
             const phone = document.getElementById('customerPhoneInput')?.value;
             if (phone) {
                 const invoiceNo = document.getElementById('invoiceNoDisplay')?.value;
-                const total = formatCurrency(convertCurrency(window.currentTotal || 0));
+                const total = formatCurrencyPlain(convertCurrency(window.currentTotal || 0));
                 const message = `Dear customer,\n\nYour invoice ${invoiceNo} for ${total} is ready.\nThank you for your business!`;
                 window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
             } else {

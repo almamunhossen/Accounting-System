@@ -399,6 +399,16 @@
             border-radius: 20px;
         }
 
+        .py-2 {
+            padding-top: 0.9rem;
+            padding-bottom: 0.9rem;
+        }
+
+        .px-3 {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
         .acc-toolbar-right {
             display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
         }
